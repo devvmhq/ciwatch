@@ -11,10 +11,11 @@ ciwatch watches every GitHub Actions run for a commit until it finishes, and sho
 | `internal/gh/` | the one runner every `gh` and `git` call goes through, and the decoding of its output |
 | `testdata/` | recorded `gh` output that the tests feed in |
 | `mise.toml`, `.golangci.yml` | pinned tools, tasks and linters |
+| `.archon/` | Archon's settings and the vendored factory pack (`workflows/archon-factory`, from devvmhq/archon-factory), which builds each dex task; never edit the pack here, upgrade it |
 
 ## Tasks
 
-`mise run <task>`: `fmt`, `lint`, `test`, `build`.
+`mise run <task>`: `fmt`, `lint`, `test`, `build`, and `factory -- feature|fix <dex-id>` to start a factory run for a task.
 
 ## Rules
 

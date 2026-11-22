@@ -1,6 +1,8 @@
 .dex/
 # Project-scoped Archon credentials (archon setup --scope project).
 .archon/.env
+# mise's local lock cache for npm-installed tools (dex).
+.mise/
 /.claude/
 /ciwatch
 dist/

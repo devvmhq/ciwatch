@@ -25,3 +25,11 @@ mise run build
 ```
 
 The gate every change passes is `mise run fmt && mise run lint && mise run test`.
+
+## How it's built
+
+Each change starts as a dex task and is built by the [archon-factory](https://github.com/devvmhq/archon-factory) workflows, vendored in `.archon/workflows/archon-factory`. Those workflows design the change, wait for approval, write failing tests first, implement, review the change adversarially until it can ship, pass the gate, and wait for a final approval before committing. With [Archon](https://archon.diy) installed (`brew install coleam00/archon/archon`, then `archon provider add claude`) and the tools from `mise install`, a task runs with:
+
+```sh
+mise run factory -- feature <dex-id>
+```

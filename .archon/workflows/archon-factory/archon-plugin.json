@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "workflow-pack",
+  "name": "archon-factory",
+  "description": "Take one dex task from design to a local commit: fail-first tests, adversarial review until SHIP, the mise gate and human approvals. Never pushes.",
+  "compatibility": {
+    "archon": ">=0.14.0"
+  },
+  "entrypoints": {
+    "feature": "feature/feature.yaml",
+    "fix": "fix/fix.yaml"
+  }
+}

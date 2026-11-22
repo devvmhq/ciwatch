@@ -8,6 +8,9 @@ CGO_ENABLED = "0"
 go = "1.27.4"
 golangci-lint = "2.15.0"
 gotestsum = "1.13.0"
+# The factory workflows' script steps, and the task list they build from.
+bun = "1.4.5"
+"npm:@zeeg/dex" = "0.16.0"
 
 [tasks.fmt]
 description = "Format Go code"
@@ -26,3 +29,7 @@ run = "gotestsum -- -race ./..."
 [tasks.build]
 description = "Build ./ciwatch"
 run = "go build -o ciwatch ./cmd/ciwatch"
+
+[tasks.factory]
+description = "Start a factory run for a dex task: mise run factory -- feature|fix <dex-id>"
+run = ".archon/workflows/archon-factory/bin/factory"

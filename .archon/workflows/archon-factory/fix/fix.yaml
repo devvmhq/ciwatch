@@ -1,0 +1,121 @@
+name: fix
+description: >-
+  Fix one dex task's bug: write a test that reproduces it and fails, fix it,
+  adversarial review until SHIP (at most 2 rounds), the mise gate, then one
+  commit fast-forwarded onto local main. Never pushes. Start it with the pack's
+  bin/factory: `factory fix <dex-id>`.
+provider: claude
+model: sonnet
+worktree:
+  enabled: true
+inputs:
+  task:
+    required: true
+    description: The dex task ID to fix.
+
+# The non-AI steps all run scripts/factory.ts (.shared/factory.ts), naming the
+# step and the lane to record; an empty lane leaves it as it is.
+nodes:
+  # Lane: reproduce.
+  - id: task
+    script: factory
+    runtime: bun
+    with: { step: start, task: $INPUTS.task, lane: reproduce }
+
+  - id: reproduce
+    depends_on: [task]
+    command: factory-reproduce
+
+  - id: red
+    depends_on: [reproduce]
+    script: factory
+    runtime: bun
+    with: { step: red, task: $INPUTS.task, lane: "" }
+
+  # Lane: build.
+  - id: lane-build
+    depends_on: [red]
+    script: factory
+    runtime: bun
+    with: { step: lane, task: $INPUTS.task, lane: build }
+
+  - id: fix
+    depends_on: [lane-build]
+    command: factory-fix-bug
+    context:
+      resume: reproduce
+
+  # Lane: review.
+  - id: review-loop
+    depends_on: [fix]
+    loop_group:
+      max_iterations: 2
+      fresh_context: true
+      until_bash: 'ship=$review.output.ship; [ "$ship" = true ]'
+      nodes:
+        - id: diff
+          script: factory
+          runtime: bun
+          with: { step: diff, task: $INPUTS.task, lane: review }
+
+        - id: review
+          depends_on: [diff]
+          command: factory-adversarial-review
+          model: opus
+          allowed_tools: [Read, Grep, Glob]
+          output_format:
+            type: object
+            properties:
+              ship: { type: boolean }
+              summary: { type: string }
+              findings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    file: { type: string }
+                    line: { type: integer }
+                    severity: { type: string, enum: [blocker, major, minor] }
+                    problem: { type: string }
+                    fix: { type: string }
+                  required: [file, severity, problem, fix]
+            required: [ship, summary, findings]
+
+        - id: fix-findings
+          depends_on: [review]
+          when: "$review.output.ship != true"
+          command: factory-fix-findings
+
+        # The group's output is its terminal nodes' output, and fix-findings is
+        # skipped when the reviewer ships, so this node always gives the verdict.
+        # Archon substitutes $review.output into bash already shell-quoted.
+        - id: verdict
+          depends_on: [review, fix-findings]
+          trigger_rule: none_failed_min_one_success
+          bash: |
+            verdict=$review.output
+            printf '%s\n' "$verdict"
+
+  # Lane: gate, then done (the commit step records it once the commit is in).
+  - id: gate
+    depends_on: [review-loop]
+    script: factory
+    runtime: bun
+    with: { step: gate, task: $INPUTS.task, lane: gate }
+
+  - id: final-diff
+    depends_on: [gate]
+    script: factory
+    runtime: bun
+    with: { step: diff, task: $INPUTS.task, lane: "" }
+
+  - id: commit-message
+    depends_on: [final-diff]
+    command: factory-commit-message
+    allowed_tools: [Read, Grep, Glob, Write]
+
+  - id: commit
+    depends_on: [commit-message]
+    script: factory
+    runtime: bun
+    with: { step: commit, task: $INPUTS.task, lane: "" }

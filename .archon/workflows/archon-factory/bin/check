@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Checks the pack: the shared module's tests, that the files feature/ and fix/
+# each need their own copy of are still identical, shellcheck on bin/, and
+# Archon's validation of both workflows in a throwaway project.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# bun test skips dot folders unless it's given the file.
+bun test ./.shared/factory.test.ts
+
+status=0
+for f in scripts/factory.ts commands/factory-adversarial-review.md commands/factory-fix-findings.md commands/factory-commit-message.md; do
+  if ! cmp -s "feature/$f" "fix/$f"; then
+    echo "check: feature/$f and fix/$f differ; they must be copies" >&2
+    status=1
+  fi
+done
+
+shellcheck bin/factory bin/check
+
+# Archon validates workflows in a project, so put the pack in a throwaway one
+# where `archon plugin copy` would.
+project=$(mktemp -d "${TMPDIR:-/tmp}/archon-factory-check.XXXXXX")
+trap 'rm -rf "$project"' EXIT
+git -C "$project" init --quiet
+mkdir -p "$project/.archon/workflows/archon-factory"
+git ls-files --cached --others --exclude-standard |
+  tar -cf - -T - | tar -xf - -C "$project/.archon/workflows/archon-factory"
+(cd "$project" && archon validate workflows feature && archon validate workflows fix) 2>&1 | grep -v '^{"level"' || status=1
+
+exit "$status"

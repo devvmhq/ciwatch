@@ -1,0 +1,7 @@
+[tools]
+bun = "1.4.5"
+shellcheck = "0.11.0"
+
+[tasks.check]
+description = "Check the pack: its tests, the shared files' copies, shellcheck and Archon's validation"
+run = "bin/check"
