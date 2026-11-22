@@ -11,7 +11,7 @@
 # "reason"`, and read its state with `archon workflow get <run> --json`.
 set -euo pipefail
 
-usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 [ $# -ge 2 ] || usage
 workflow=$1 task=$2

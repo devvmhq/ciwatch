@@ -23,4 +23,6 @@ Write the tests the design names, plus any the approver asked for. Each must fai
 
 Then run the project's tests and confirm that the new tests fail for the reason you expect. A separate check runs the suite after you, and it fails the run if no test files changed or if the suite passes.
 
+The workflow commits each step on the run's branch. Write the commit message for these tests to `$ARTIFACTS_DIR/commit-tests.txt` with the Write tool, following AGENTS.md's rules for commits. Unless it says otherwise, use Conventional Commits: a `test(scope): summary` line under 72 characters, a blank line, then a body in plain, joined sentences wrapped at 72 characters, saying which tests you added and how each fails before the change. Never put a dex or other tracker task ID in it, and don't run `git commit` yourself.
+
 Reply with the tests you wrote and how each one fails now.

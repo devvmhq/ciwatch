@@ -2,8 +2,8 @@ name: feature
 description: >-
   Build one dex task as a feature: design, your approval, failing tests first,
   implement, self-review, adversarial review until SHIP (at most 3 rounds), the
-  mise gate, your review, then one commit fast-forwarded onto local main.
-  Never pushes. Start it with the pack's bin/factory: `factory feature <dex-id>`.
+  mise gate and your review, each step committed on the run's branch, which
+  then lands on local main with a merge commit. Never pushes. Start it with the pack's bin/factory: `factory feature <dex-id>`.
 provider: claude
 model: sonnet
 worktree:
@@ -67,22 +67,43 @@ nodes:
     runtime: bun
     with: { step: red, task: $INPUTS.task, lane: "" }
 
-  - id: implement
+  # Each stage commits what it changed on the run's branch, with the message
+  # its AI step wrote, so the branch lands with every step.
+  - id: commit-tests
     depends_on: [red]
+    script: factory
+    runtime: bun
+    with: { step: checkpoint-tests, task: $INPUTS.task, lane: "" }
+
+  - id: implement
+    depends_on: [commit-tests]
     command: factory-implement
     context:
       resume: tests
 
-  - id: self-review
+  - id: commit-implement
     depends_on: [implement]
+    script: factory
+    runtime: bun
+    with: { step: checkpoint-implement, task: $INPUTS.task, lane: "" }
+
+  - id: self-review
+    depends_on: [commit-implement]
     command: factory-self-review
     context:
       resume: implement
 
-  # Lane: review. A fresh reviewer each round, without write tools; a fixer
-  # acts on its findings. Reaching the cap fails the run for a human to judge.
-  - id: review-loop
+  - id: commit-self-review
     depends_on: [self-review]
+    script: factory
+    runtime: bun
+    with: { step: checkpoint-self-review, task: $INPUTS.task, lane: "" }
+
+  # Lane: review. A fresh reviewer each round, without write tools; a fixer
+  # acts on its findings, and the round is committed with both. Reaching the
+  # cap fails the run for a human to judge.
+  - id: review-loop
+    depends_on: [commit-self-review]
     loop_group:
       max_iterations: 3
       fresh_context: true
@@ -121,11 +142,18 @@ nodes:
           when: "$review.output.ship != true"
           command: factory-fix-findings
 
-        # The group's output is its terminal nodes' output, and fix is skipped
-        # when the reviewer ships, so this node always gives the verdict.
-        # Archon substitutes $review.output into bash already shell-quoted.
+        - id: commit-review
+          depends_on: [fix]
+          script: factory
+          runtime: bun
+          with: { step: checkpoint-review, task: $INPUTS.task, lane: "" }
+
+        # The group's output is its terminal nodes' output, and the fix and its
+        # commit are skipped when the reviewer ships, so this node always gives
+        # the verdict. Archon substitutes $review.output into bash already
+        # shell-quoted.
         - id: verdict
-          depends_on: [review, fix]
+          depends_on: [review, commit-review]
           trigger_rule: none_failed_min_one_success
           bash: |
             verdict=$review.output
@@ -138,9 +166,15 @@ nodes:
     runtime: bun
     with: { step: gate, task: $INPUTS.task, lane: gate }
 
-  # The diff as it will be committed (the gate's fmt may have changed it).
-  - id: final-diff
+  - id: commit-gate
     depends_on: [gate]
+    script: factory
+    runtime: bun
+    with: { step: checkpoint-gate, task: $INPUTS.task, lane: "" }
+
+  # The whole change as it will land.
+  - id: final-diff
+    depends_on: [commit-gate]
     script: factory
     runtime: bun
     with: { step: diff, task: $INPUTS.task, lane: "" }
@@ -163,10 +197,11 @@ nodes:
       form: approval
       attention: |
         Dex task $INPUTS.task passed the gate and is ready for your review.
-        Approve to commit it and fast-forward local main (nothing is pushed),
-        or reject with a reason to stop here and keep the worktree.
+        Approve to land its branch on local main with a merge commit (nothing
+        is pushed), or reject with a reason to stop here and keep the worktree
+        and its branch.
 
-        Commit message:
+        Merge commit message:
 
         $commit-message.output
 
@@ -180,10 +215,10 @@ nodes:
     when: "$approve-final.output.decision == 'reject'"
     cancel: The change was rejected at the final review.
 
-  # Lane: done (the commit step records it once the commit is in).
-  - id: commit
+  # Lane: done (the land step records it once the merge is in).
+  - id: land
     depends_on: [approve-final]
     when: "$approve-final.output.decision == 'approve'"
     script: factory
     runtime: bun
-    with: { step: commit, task: $INPUTS.task, lane: "" }
+    with: { step: land, task: $INPUTS.task, lane: "" }

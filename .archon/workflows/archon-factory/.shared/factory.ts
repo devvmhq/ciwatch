@@ -1,5 +1,5 @@
 // The factory pack's steps that aren't AI: dex, lanes, the fail-first check, the
-// diff, the gate and the commit. Each workflow's scripts/factory.ts calls step()
+// diff, the gate, each stage's commit and the landing merge. Each workflow's scripts/factory.ts calls step()
 // with the values its node binds; nothing here reads the environment itself.
 //
 // Runs happen in an Archon worktree, but dex's storage (.dex/, gitignored) lives
@@ -7,7 +7,7 @@
 
 import { $ } from "bun";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rmdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 $.throws(true);
@@ -105,27 +105,69 @@ async function gate(): Promise<void> {
   for (const task of ["fmt", "lint", "test"]) await $`mise run ${task}`;
 }
 
-// Commits the worktree as one commit with the message the commit-message node
-// wrote, fast-forwards the main checkout's current branch to it, and completes
-// the dex task. Never pushes. The task ID stays out of the commit; dex links the
-// task to the commit instead.
-async function commit(a: Args): Promise<void> {
-  const message = join(a.artifacts, "commit-message.txt");
-  if (!existsSync(message) || (await readFile(message, "utf8")).trim() === "") {
-    throw new Error(`no commit message at ${message}`);
-  }
+async function nonEmpty(file: string): Promise<boolean> {
+  return existsSync(file) && (await readFile(file, "utf8")).trim() !== "";
+}
+
+async function staged(): Promise<boolean> {
   await $`git add --all`.quiet();
-  if ((await $`git diff --cached --quiet`.quiet().nothrow()).exitCode === 0) throw new Error("nothing to commit");
-  await $`git commit --quiet --file ${message}`.quiet();
-  const sha = (await $`git rev-parse HEAD`.quiet().text()).trim();
+  return (await $`git diff --cached --quiet`.quiet().nothrow()).exitCode !== 0;
+}
+
+// The stages that commit on the run's branch, each with the message its AI step
+// writes to commit-<stage>.txt in the artifacts folder. gate is the exception:
+// what mise run fmt changed gets a fixed message.
+export const stages = ["tests", "implement", "self-review", "review", "reproduce", "fix", "gate"] as const;
+
+// Commits what a stage changed on the run's branch, so the branch keeps every
+// step: the failing tests, the implementation, the self-review, each review
+// round and the formatter. A stage that changed nothing commits nothing, except
+// a review round, which always commits (empty if the fixer changed nothing) so
+// the reviewer's findings and the answers to them stay in the history.
+export async function checkpoint(artifacts: string, stage: string): Promise<string> {
+  if (!(stages as readonly string[]).includes(stage)) throw new Error(`unknown stage '${stage}'`);
+  const changed = await staged();
+  const file = join(artifacts, `commit-${stage}.txt`);
+  if (stage === "gate") {
+    if (!changed) return "gate: nothing to commit";
+    // The previous commit's trailers (Co-Authored-By and the like), since the
+    // project's rules for commits apply to this one too.
+    const trailers = (await $`git log -1 ${"--format=%(trailers:only)"}`.quiet().text()).trim();
+    await writeFile(file, `style: apply mise run fmt${trailers ? `\n\n${trailers}` : ""}\n`);
+  } else if (!(await nonEmpty(file))) {
+    if (!changed) return `${stage}: nothing to commit`;
+    throw new Error(`the ${stage} step changed files but wrote no commit message to ${file}`);
+  } else if (!changed && stage !== "review") {
+    await rm(file);
+    return `${stage}: nothing to commit`;
+  }
+  await $`git commit --quiet --allow-empty --file ${file}`.quiet();
+  await rm(file); // so a later round can't reuse it
+  return (await $`git log -1 ${"--format=%h %s"}`.quiet().text()).trim();
+}
+
+// Lands the run's branch on the main checkout's current branch with a merge
+// commit (git merge --no-ff), whose message the commit-message node wrote, and
+// completes the dex task. Every commit on the branch is kept, and the main
+// branch's first-parent history passes the gate at every commit. Never pushes.
+// The task ID stays out of the commits; dex links the task to the merge instead.
+async function land(a: Args): Promise<void> {
+  const message = join(a.artifacts, "commit-message.txt");
+  if (!(await nonEmpty(message))) throw new Error(`no landing message at ${message}`);
+  if (await staged()) throw new Error("the worktree has changes no checkpoint committed");
+  const head = (await $`git rev-parse HEAD`.quiet().text()).trim();
+  const base = (await readFile(join(a.artifacts, "base"), "utf8")).trim();
+  if (head === base) throw new Error("the branch has no commits to land");
   const main = await root();
   const branch = (await $`git -C ${main} branch --show-current`.quiet().text()).trim();
-  const merged = await $`git -C ${main} merge --ff-only --quiet ${sha}`.quiet().nothrow();
+  const merged = await $`git -C ${main} merge --no-ff --quiet --file ${message} ${head}`.quiet().nothrow();
   if (merged.exitCode !== 0) {
+    await $`git -C ${main} merge --abort`.quiet().nothrow();
     const here = (await $`git branch --show-current`.quiet().text()).trim();
-    throw new Error(`committed ${sha} on ${here}, but could not fast-forward ${branch} in ${main}; merge it by hand:\n${merged.stderr}`);
+    throw new Error(`could not merge ${here} into ${branch} in ${main}; it's left as it was, so merge it by hand:\n${merged.stdout}${merged.stderr}`);
   }
-  await dex(["complete", a.task, "--result", `Committed ${sha} (Archon run ${a.run})`, "--commit", sha]);
+  const sha = (await $`git -C ${main} rev-parse HEAD`.quiet().text()).trim();
+  await dex(["complete", a.task, "--result", `Landed ${sha} (Archon run ${a.run})`, "--commit", sha]);
   await setLane(join(main, ".dex"), a.task, "done", a.run);
   console.log(sha);
 }
@@ -154,9 +196,13 @@ export async function step(name: string, a: Args): Promise<void> {
       return;
     case "gate":
       return gate();
-    case "commit":
-      return commit(a);
+    case "land":
+      return land(a);
     default:
+      if (name.startsWith("checkpoint-")) {
+        console.log(await checkpoint(a.artifacts, name.slice("checkpoint-".length)));
+        return;
+      }
       throw new Error(`unknown step '${name}'`);
   }
 }

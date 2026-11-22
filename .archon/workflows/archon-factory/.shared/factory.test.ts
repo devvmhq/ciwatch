@@ -1,9 +1,75 @@
-import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { $ } from "bun";
+import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { isTestPath, setLane } from "./factory.ts";
+import { checkpoint, isTestPath, setLane } from "./factory.ts";
+
+// A git repo with one commit, as the current directory, and an artifacts folder.
+async function repo(): Promise<{ dir: string; artifacts: string }> {
+  const dir = await mkdtemp(join(tmpdir(), "factory-repo-"));
+  const artifacts = join(dir, ".artifacts");
+  await mkdir(artifacts);
+  process.chdir(dir);
+  await $`git init --quiet -b main && git config user.email t@example.com && git config user.name t`.quiet();
+  await writeFile(".gitignore", ".artifacts/\n");
+  await writeFile("a.go", "package a\n");
+  await $`git add --all && git commit --quiet -m init -m "Co-Authored-By: Someone <s@example.com>"`.quiet();
+  return { dir, artifacts };
+}
+
+async function log(): Promise<string[]> {
+  return (await $`git log ${"--format=%s"}`.quiet().text()).trim().split("\n");
+}
+
+describe("checkpoint", () => {
+  const start = process.cwd();
+  afterEach(() => process.chdir(start));
+
+  test("commits a stage's changes with its message, and removes the message", async () => {
+    const { artifacts } = await repo();
+    await writeFile("a_test.go", "package a\n");
+    await writeFile(join(artifacts, "commit-tests.txt"), "test(a): a failing test\n");
+    expect(await checkpoint(artifacts, "tests")).toMatch(/^[0-9a-f]+ test\(a\): a failing test$/);
+    expect(await log()).toEqual(["test(a): a failing test", "init"]);
+    expect(existsSync(join(artifacts, "commit-tests.txt"))).toBe(false);
+  });
+
+  test("commits nothing for a stage that changed nothing", async () => {
+    const { artifacts } = await repo();
+    await writeFile(join(artifacts, "commit-self-review.txt"), "refactor(a): tidy\n");
+    expect(await checkpoint(artifacts, "self-review")).toBe("self-review: nothing to commit");
+    expect(await log()).toEqual(["init"]);
+  });
+
+  test("fails when a stage changed files but wrote no message", async () => {
+    const { artifacts } = await repo();
+    await writeFile("a.go", "package a\n\nfunc A() {}\n");
+    await expect(checkpoint(artifacts, "implement")).rejects.toThrow("wrote no commit message");
+  });
+
+  test("records a review round even when the fixer changed nothing", async () => {
+    const { artifacts } = await repo();
+    await writeFile(join(artifacts, "commit-review.txt"), "fix(a): review round\n\nDisputed: the finding about A.\n");
+    expect(await checkpoint(artifacts, "review")).toMatch(/fix\(a\): review round$/);
+    expect(await log()).toEqual(["fix(a): review round", "init"]);
+  });
+
+  test("commits the formatter's changes with the previous commit's trailers", async () => {
+    const { artifacts } = await repo();
+    await writeFile("a.go", "package a\n// formatted\n");
+    await checkpoint(artifacts, "gate");
+    const message = (await $`git log -1 ${"--format=%B"}`.quiet().text()).trim();
+    expect(message).toBe("style: apply mise run fmt\n\nCo-Authored-By: Someone <s@example.com>");
+  });
+
+  test("refuses a stage it doesn't know", async () => {
+    const { artifacts } = await repo();
+    await expect(checkpoint(artifacts, "deploy")).rejects.toThrow("unknown stage");
+  });
+});
 
 describe("isTestPath", () => {
   const cases: [string, boolean][] = [

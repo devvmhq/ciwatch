@@ -1,8 +1,9 @@
 name: fix
 description: >-
   Fix one dex task's bug: write a test that reproduces it and fails, fix it,
-  adversarial review until SHIP (at most 2 rounds), the mise gate, then one
-  commit fast-forwarded onto local main. Never pushes. Start it with the pack's
+  adversarial review until SHIP (at most 2 rounds) and the mise gate, each step
+  committed on the run's branch, which then lands on local main with a merge
+  commit. Never pushes. Start it with the pack's
   bin/factory: `factory fix <dex-id>`.
 provider: claude
 model: sonnet
@@ -32,9 +33,17 @@ nodes:
     runtime: bun
     with: { step: red, task: $INPUTS.task, lane: "" }
 
+  # Each stage commits what it changed on the run's branch, with the message
+  # its AI step wrote, so the branch lands with every step.
+  - id: commit-reproduce
+    depends_on: [red]
+    script: factory
+    runtime: bun
+    with: { step: checkpoint-reproduce, task: $INPUTS.task, lane: "" }
+
   # Lane: build.
   - id: lane-build
-    depends_on: [red]
+    depends_on: [commit-reproduce]
     script: factory
     runtime: bun
     with: { step: lane, task: $INPUTS.task, lane: build }
@@ -45,9 +54,16 @@ nodes:
     context:
       resume: reproduce
 
-  # Lane: review.
-  - id: review-loop
+  - id: commit-fix
     depends_on: [fix]
+    script: factory
+    runtime: bun
+    with: { step: checkpoint-fix, task: $INPUTS.task, lane: "" }
+
+  # Lane: review. Each round is committed with the reviewer's findings and the
+  # answers to them.
+  - id: review-loop
+    depends_on: [commit-fix]
     loop_group:
       max_iterations: 2
       fresh_context: true
@@ -86,25 +102,38 @@ nodes:
           when: "$review.output.ship != true"
           command: factory-fix-findings
 
-        # The group's output is its terminal nodes' output, and fix-findings is
-        # skipped when the reviewer ships, so this node always gives the verdict.
-        # Archon substitutes $review.output into bash already shell-quoted.
+        - id: commit-review
+          depends_on: [fix-findings]
+          script: factory
+          runtime: bun
+          with: { step: checkpoint-review, task: $INPUTS.task, lane: "" }
+
+        # The group's output is its terminal nodes' output, and fix-findings and
+        # its commit are skipped when the reviewer ships, so this node always
+        # gives the verdict. Archon substitutes $review.output into bash already
+        # shell-quoted.
         - id: verdict
-          depends_on: [review, fix-findings]
+          depends_on: [review, commit-review]
           trigger_rule: none_failed_min_one_success
           bash: |
             verdict=$review.output
             printf '%s\n' "$verdict"
 
-  # Lane: gate, then done (the commit step records it once the commit is in).
+  # Lane: gate, then done (the land step records it once the merge is in).
   - id: gate
     depends_on: [review-loop]
     script: factory
     runtime: bun
     with: { step: gate, task: $INPUTS.task, lane: gate }
 
-  - id: final-diff
+  - id: commit-gate
     depends_on: [gate]
+    script: factory
+    runtime: bun
+    with: { step: checkpoint-gate, task: $INPUTS.task, lane: "" }
+
+  - id: final-diff
+    depends_on: [commit-gate]
     script: factory
     runtime: bun
     with: { step: diff, task: $INPUTS.task, lane: "" }
@@ -114,8 +143,8 @@ nodes:
     command: factory-commit-message
     allowed_tools: [Read, Grep, Glob, Write]
 
-  - id: commit
+  - id: land
     depends_on: [commit-message]
     script: factory
     runtime: bun
-    with: { step: commit, task: $INPUTS.task, lane: "" }
+    with: { step: land, task: $INPUTS.task, lane: "" }

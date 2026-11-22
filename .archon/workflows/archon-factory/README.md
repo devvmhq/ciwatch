@@ -1,6 +1,6 @@
 # archon-factory
 
-An [Archon](https://archon.diy) workflow pack that takes one dex task from design to a local commit, the same way in every project. Each AI step does one job, and the checks between the steps are code, so a step that skips the protocol fails the run. A human approves the design and the finished change, and nothing is ever pushed.
+An [Archon](https://archon.diy) workflow pack that takes one dex task from design to a change landed on the local main branch, the same way in every project. Each AI step does one job, and the checks between the steps are code, so a step that skips the protocol fails the run. Each step is committed on the run's branch, which lands with a merge commit, so the history keeps the failing tests, the implementation and every review round. A human approves the design and the finished change, and nothing is ever pushed.
 
 ## The workflows
 
@@ -11,11 +11,23 @@ An [Archon](https://archon.diy) workflow pack that takes one dex task from desig
 3. **Implement** and **self-review** (Sonnet), in the same session as the tests.
 4. **Adversarial review** (Opus, read-only), at most 3 rounds. Each round, a fresh reviewer gets the diff and returns `ship` with findings, and a fixer (Sonnet) acts on them when it's `false`. A run that reaches the cap fails for you to judge. Minor findings don't block, so read them at the final review.
 5. **The gate:** `mise run fmt`, `mise run lint` and `mise run test`.
-6. **The commit message** (Sonnet), written from the final diff to the project's AGENTS.md rules.
-7. **Your review:** the diff's stat, the commit message and the last review, then a wait for your approval.
-8. **Commit and fast-forward:** one commit on the run's branch, then the main checkout's current branch is fast-forwarded to it, and the dex task is completed with the commit. If the fast-forward can't happen, the run says so and you merge by hand.
+6. **The merge message** (Sonnet), written from the whole change to the project's AGENTS.md rules, ending with any minor findings the last review left.
+7. **Your review:** the diff's stat, the merge message and the last review, then a wait for your approval.
+8. **Land:** the run's branch is merged into the main checkout's current branch with `git merge --no-ff`, and the dex task is completed with the merge commit. If the merge conflicts, it's aborted and the run says so, so you merge by hand.
 
-**`fix`** fixes a bug the same way, without the design step or your approvals. It writes a test that reproduces the bug and checks that it fails, fixes the bug, runs at most 2 review rounds, passes the gate and commits.
+Along the way, each stage commits what it changed on the run's branch, with a message its AI step writes to AGENTS.md's rules:
+
+| Commit | After |
+| --- | --- |
+| `test(…)`: the failing tests | the red check (this commit fails the tests on purpose) |
+| the implementation | implement |
+| the self-review's fixes | self-review, if it changed anything |
+| `fix(…)`: one per review round | each fixer round, listing every finding and what was done about it, or why it was disputed; committed even when nothing changed |
+| `style: apply mise run fmt` | the gate, if the formatter changed anything |
+
+The merge commit keeps the main branch's first-parent history passing the gate at every commit, so `git bisect --first-parent` skips the red test commits.
+
+**`fix`** fixes a bug the same way, without the design step or your approvals. It writes a test that reproduces the bug and checks that it fails, fixes the bug, runs at most 2 review rounds and passes the gate, committing each step, then lands the branch with a merge commit.
 
 ## Lanes
 
@@ -68,7 +80,7 @@ A finished run leaves its worktree under `~/.archon/workspaces/<project>/worktre
 | --- | --- |
 | `archon-plugin.json` | the pack's manifest: its name and its two entrypoints |
 | `feature/`, `fix/` | each workflow's YAML, its prompts (`commands/`) and its script (`scripts/factory.ts`) |
-| `.shared/factory.ts` | the steps that aren't AI: dex, lanes, the fail-first check, the diff, the gate and the commit |
+| `.shared/factory.ts` | the steps that aren't AI: dex, lanes, the fail-first check, the diff, the gate, each stage's commit and the landing merge |
 | `bin/factory` | starts a run for a dex task |
 | `bin/check` | the pack's own check (`mise run check`): the tests, the copies, shellcheck and Archon's validation |
 
