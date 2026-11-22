@@ -1,0 +1,11 @@
+=== RUN   TestSlow
+    v_test.go:9: hi
+panic: boom
+
+goroutine 35 [running]:
+example.com/m/v.TestSlow.func1()
+	/tmp/ciw/v/v_test.go:10 +0x2c
+created by example.com/m/v.TestSlow in goroutine 34
+	/tmp/ciw/v/v_test.go:10 +0x4c
+FAIL	example.com/m/v	0.127s
+FAIL

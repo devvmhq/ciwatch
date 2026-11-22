@@ -1,0 +1,11 @@
+# example.com/m/d [example.com/m/d.test]
+d/d.go:3:23: undefined: undefinedD
+# example.com/m/a [example.com/m/a.test]
+a/a.go:3:23: cannot use "x" (untyped string constant) as int value in return statement
+FAIL	example.com/m/a [build failed]
+# example.com/m/b [example.com/m/b.test]
+b/b.go:3:23: undefined: undefinedB
+FAIL	example.com/m/b [build failed]
+ok  	example.com/m/c	0.108s
+FAIL	example.com/m/d [build failed]
+FAIL

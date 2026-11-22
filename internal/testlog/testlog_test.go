@@ -637,7 +637,7 @@ func TestParseCrashes(t *testing.T) {
 	}{
 		{
 			"verbose, no failing test", "=== RUN   TestX\n" + strings.Join(crash, "\n") + "\nexit status 2\nFAIL\tp\t0.1s\n",
-			[]testlog.Failure{{Package: "p", Name: "(package)", Lines: crash}},
+			[]testlog.Failure{{Package: "p", Name: "(package)", Lines: crash, RunningTest: "TestX"}},
 		},
 		{
 			"after a failing test of the package", "--- FAIL: TestA (0.00s)\n    a_test.go:1: x\n" + strings.Join(crash, "\n") + "\nexit status 2\nFAIL\tp\t0.1s\n",
@@ -650,7 +650,7 @@ func TestParseCrashes(t *testing.T) {
 			"verbose, after a failing test of the package", "=== RUN   TestA\n    a_test.go:1: x\n--- FAIL: TestA (0.00s)\n=== RUN   TestB\n" + strings.Join(crash, "\n") + "\nexit status 2\nFAIL\tp\t0.1s\n",
 			[]testlog.Failure{
 				{Package: "p", Name: "TestA", Lines: []string{"    a_test.go:1: x"}},
-				{Package: "p", Name: "(package)", Lines: crash},
+				{Package: "p", Name: "(package)", Lines: crash, RunningTest: "TestB"},
 			},
 		},
 		{
@@ -679,7 +679,7 @@ func TestParseCrashes(t *testing.T) {
 			"verbose, after a passing package, panic after a failing test", passed + "=== RUN   TestA\n    a_test.go:1: x\n--- FAIL: TestA (0.00s)\n=== RUN   TestB\n" + strings.Join(crash, "\n") + "\nexit status 2\nFAIL\tp\t0.1s\n",
 			[]testlog.Failure{
 				{Package: "p", Name: "TestA", Lines: []string{"    a_test.go:1: x"}},
-				{Package: "p", Name: "(package)", Lines: crash},
+				{Package: "p", Name: "(package)", Lines: crash, RunningTest: "TestB"},
 			},
 		},
 		{
@@ -754,5 +754,105 @@ func TestParseCrashAfterTrailingFailOfEarlierRun(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Failures = %#v, want %#v", got, want)
+	}
+}
+
+// gotest-build-failed-packages.log is real go test output of three throwaway
+// packages with compile errors (a, b, d) and one that passes (c), made in a
+// temp folder outside the repository. go test prints d's errors first, and an
+// "ok" line comes between b's and d's "FAIL" lines.
+func TestParseBuildErrorsGoToTheirOwnPackage(t *testing.T) {
+	failures := parse(t, fixture(t, "gotest-build-failed-packages.log")).Failures
+	for _, c := range []struct{ pkg, mine, other string }{
+		{"example.com/m/a", "a/a.go:3:23", "/b.go"},
+		{"example.com/m/b", "b/b.go:3:23", "/a.go"},
+		{"example.com/m/d", "d/d.go:3:23", "/a.go"},
+	} {
+		t.Run(c.pkg, func(t *testing.T) {
+			var got *testlog.Failure
+			for i := range failures {
+				if failures[i].Package == c.pkg && failures[i].Name == "(package)" {
+					got = &failures[i]
+				}
+			}
+			if got == nil {
+				t.Fatalf("no (package) failure for %s in %#v", c.pkg, failures)
+			}
+			text := strings.Join(got.Lines, "\n")
+			if !strings.Contains(text, c.mine) {
+				t.Errorf("lines = %q, want the error at %s", text, c.mine)
+			}
+			if strings.Contains(text, c.other) || strings.Contains(text, "a/a.go") && c.pkg != "example.com/m/a" || strings.Contains(text, "d/d.go") && c.pkg != "example.com/m/d" {
+				t.Errorf("lines = %q hold another package's errors", text)
+			}
+		})
+	}
+}
+
+// A crash during a go test -v run names the test that was running. The log is
+// real output of a test that started a goroutine which panicked.
+func TestParseCrashNamesRunningTest(t *testing.T) {
+	failures := parse(t, fixture(t, "gotest-verbose-crash.log")).Failures
+	if len(failures) != 1 || failures[0].Name != "(package)" {
+		t.Fatalf("Failures = %#v, want one (package) failure", failures)
+	}
+	if got := failures[0].RunningTest; got != "TestSlow" {
+		t.Errorf("RunningTest = %q, want %q", got, "TestSlow")
+	}
+}
+
+func TestParseBuildErrorsEdgeCases(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		log  string
+		want []testlog.Failure
+	}{
+		{
+			"matched by file path when the header names no package",
+			"# command-line-arguments\nsvc/db/db.go:3:1: bad\nFAIL\texample.com/m/svc/db [build failed]\n",
+			[]testlog.Failure{{Package: "example.com/m/svc/db", Name: "(package)", Lines: []string{"# command-line-arguments", "svc/db/db.go:3:1: bad"}}},
+		},
+		{
+			"errors no package claims are kept in a (build) failure",
+			"# example.com/m/x [example.com/m/x.test]\nx/x.go:3:1: bad\nok  \texample.com/m/y\t0.1s\nFAIL\n",
+			[]testlog.Failure{{Name: "(build)", Lines: []string{"# example.com/m/x [example.com/m/x.test]", "x/x.go:3:1: bad"}}},
+		},
+		{
+			"an ok line between a package's errors and its FAIL line",
+			"# example.com/m/x [example.com/m/x.test]\nx/x.go:3:1: bad\nok  \texample.com/m/y\t0.1s\nFAIL\texample.com/m/x [build failed]\nFAIL\n",
+			[]testlog.Failure{{Package: "example.com/m/x", Name: "(package)", Lines: []string{"# example.com/m/x [example.com/m/x.test]", "x/x.go:3:1: bad"}}},
+		},
+		{
+			"a crash after another package's compile errors stays with the crashed package",
+			"# example.com/m/d [example.com/m/d.test]\nd/d.go:3:23: undefined: x\npanic: boom\n\ngoroutine 1 [running]:\n\t/tmp/a/a_test.go:9 +0x1\nexit status 2\nFAIL\texample.com/m/a\t0.1s\nFAIL\texample.com/m/d [build failed]\n",
+			[]testlog.Failure{
+				{Package: "example.com/m/a", Name: "(package)", Lines: []string{"panic: boom", "", "goroutine 1 [running]:", "\t/tmp/a/a_test.go:9 +0x1"}},
+				{Package: "example.com/m/d", Name: "(package)", Lines: []string{"# example.com/m/d [example.com/m/d.test]", "d/d.go:3:23: undefined: x"}},
+			},
+		},
+		{
+			"indented continuation lines stay with the errors",
+			"# example.com/m/x [example.com/m/x.test]\nx/x.go:3:1: cannot use y\n\thave (int)\n\twant (string)\nx/x.go:4:1: too many errors\nFAIL\texample.com/m/x [build failed]\n",
+			[]testlog.Failure{{Package: "example.com/m/x", Name: "(package)", Lines: []string{"# example.com/m/x [example.com/m/x.test]", "x/x.go:3:1: cannot use y", "\thave (int)", "\twant (string)", "x/x.go:4:1: too many errors"}}},
+		},
+		{
+			"a vet failure's second header keeps its errors with the package",
+			"# example.com/m/a\n# [example.com/m/a]\na/a_test.go:9:2: fmt.Printf format %d has arg s of wrong type string\nFAIL\texample.com/m/a [build failed]\n",
+			[]testlog.Failure{{Package: "example.com/m/a", Name: "(package)", Lines: []string{"# example.com/m/a", "# [example.com/m/a]", "a/a_test.go:9:2: fmt.Printf format %d has arg s of wrong type string"}}},
+		},
+		{
+			"a package whose path ends the same does not take another's errors",
+			"# example.com/m/config [example.com/m/config.test]\nconfig/c.go:1:1: bad\n--- FAIL: TestX (0.00s)\nFAIL\nFAIL\texample.com/m/cmd/app/config\t0.1s\nFAIL\texample.com/m/config [build failed]\n",
+			[]testlog.Failure{
+				{Package: "example.com/m/cmd/app/config", Name: "TestX"},
+				{Package: "example.com/m/config", Name: "(package)", Lines: []string{"# example.com/m/config [example.com/m/config.test]", "config/c.go:1:1: bad"}},
+			},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := parse(t, c.log).Failures; !reflect.DeepEqual(got, c.want) {
+				t.Errorf("Failures = %#v, want %#v", got, c.want)
+			}
+		})
 	}
 }

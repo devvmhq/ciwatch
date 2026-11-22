@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,6 +18,10 @@ type Failure struct {
 	Package string   // "" if the log never names it
 	Name    string   // "TestBoot/arm64"
 	Lines   []string // the lines after the FAIL line, prefixes removed
+
+	// RunningTest is the test that was running when a "(package)" crash
+	// happened during a verbose run; "" when unknown.
+	RunningTest string
 }
 
 // Summary is gotestsum's DONE line.
@@ -49,6 +54,13 @@ var (
 	// gotestsum's block for a test is part of that test's lines.
 	subResultRE = regexp.MustCompile(`^\s+--- (?:FAIL|PASS|SKIP): `)
 	runningRE   = regexp.MustCompile(`^\s+(\S+) \([^)]*\)$`)
+	// buildHeaderRE is the "# pkg [pkg.test]" line that starts a package's
+	// compile errors; buildFileRE is an error line, which names its file.
+	buildHeaderRE = regexp.MustCompile(`^# (\S+)(?: \[[^\]]*\])?$`)
+	buildFileRE   = regexp.MustCompile(`^(\S+\.go):\d+`)
+	// buildLineRE is what continues a block of compile errors: an error line,
+	// an indented note, vet's output or the compiler's "too many errors".
+	buildLineRE = regexp.MustCompile(`^(?:\S+\.go:\d+|\s|vet: |too many errors|# )`)
 	pkgFailRE   = regexp.MustCompile(`^FAIL\t(\S+)`)
 	doneRE      = regexp.MustCompile(`^DONE (?:\d+ runs?, )?(\d+) tests?(?:, (\d+) skipped)?(?:, (\d+) failures?)?(?:, (\d+) errors?)? in `)
 )
@@ -59,6 +71,37 @@ func stripPrefix(line string) string {
 	line = strings.TrimSuffix(line, "\r")
 	line = prefixRE.ReplaceAllString(line, "")
 	return ansiRE.ReplaceAllString(line, "")
+}
+
+// buildBlock is one package's compile errors, from its "# pkg" line on.
+type buildBlock struct {
+	pkg     string // the import path in the "# pkg" line
+	lines   []string
+	claimed bool // given to a package's "FAIL<TAB>pkg" line
+}
+
+// matches reports whether the block belongs to pkg: its "# pkg" line names it
+// (or its external test package), or, when byFile is set and the header names
+// no package ("command-line-arguments"), the directory of a file in its error
+// lines is the package's path or the end of it.
+func (b *buildBlock) matches(pkg string, byFile bool) bool {
+	if !byFile {
+		return b.pkg == pkg || b.pkg == pkg+"_test"
+	}
+	if b.pkg != "command-line-arguments" {
+		return false
+	}
+	for _, l := range b.lines {
+		m := buildFileRE.FindStringSubmatch(l)
+		if m == nil {
+			continue
+		}
+		dir := path.Dir(path.Clean(m[1]))
+		if dir != "." && dir != "/" && (pkg == dir || strings.HasSuffix(pkg, "/"+dir)) {
+			return true
+		}
+	}
+	return false
 }
 
 // found is a failure and which format reported it.
@@ -76,12 +119,15 @@ func Parse(r io.Reader) (Result, error) {
 		panicked  bool  // the open failure has hit a panic, which spans blank lines
 		pending   []int // failures waiting for a "FAIL<TAB>pkg" line
 		out       string
-		summaries []Summary // every DONE line, in log order
-		stray     []string  // lines outside any test since the last marker, where a crash with no "--- FAIL:" line lands
-		crashed   bool      // a crash has been seen since the last "FAIL<TAB>pkg" line
-		ran       bool      // a test has started or finished since the last "FAIL<TAB>pkg", "ok" or step line, so a bare "FAIL" is testing's own and not the run's closing one
-		ended     bool      // testing's own "FAIL" or "PASS" line has been seen since the last "FAIL<TAB>pkg" line: the run finished, so what follows is not a crash
-		timeout   []string  // lines of a "test timed out" panic being read; nil when none
+		summaries []Summary     // every DONE line, in log order
+		stray     []string      // lines outside any test since the last marker, where a crash with no "--- FAIL:" line lands
+		crashed   bool          // a crash has been seen since the last "FAIL<TAB>pkg" line
+		ran       bool          // a test has started or finished since the last "FAIL<TAB>pkg", "ok" or step line, so a bare "FAIL" is testing's own and not the run's closing one
+		ended     bool          // testing's own "FAIL" or "PASS" line has been seen since the last "FAIL<TAB>pkg" line: the run finished, so what follows is not a crash
+		timeout   []string      // lines of a "test timed out" panic being read; nil when none
+		builds    []*buildBlock // compile errors, kept until a package's "FAIL<TAB>pkg" line claims them
+		build     *buildBlock   // the block being read; nil when none
+		crashTest string        // the -v test that was running when the package crashed
 		timing    bool
 		running   bool                    // inside the timeout's "running tests:" list
 		names     []string                // the tests that list names
@@ -109,6 +155,7 @@ func Parse(r io.Reader) (Result, error) {
 	// ended while the test was still running.
 	takeOut := func() {
 		if out != "" {
+			crashTest = out
 			stray = append(stray, output[out]...)
 			delete(output, out)
 			out = ""
@@ -124,6 +171,10 @@ func Parse(r io.Reader) (Result, error) {
 	}
 	handle := func(line string) {
 		line = stripPrefix(line)
+		// A marker, gotestsum block or timeout ends the compile errors being read.
+		if build != nil && (markerRE.MatchString(line) || gotestsumF.MatchString(line) || runRE.MatchString(line) || timeoutRE.MatchString(line) || doneRE.MatchString(line)) {
+			build = nil
+		}
 		// Inside gotestsum's block for a test, the timeout panic is part of
 		// that test's lines.
 		inBlock := cur >= 0 && !all[cur].goTest
@@ -177,15 +228,21 @@ func Parse(r io.Reader) (Result, error) {
 			// output has a crash after its failures, crashed; the lines before
 			// this one say how.
 			takeOut()
-			if crashed || len(pending) == 0 || !ended {
+			var claimed *buildBlock
+			if strings.Contains(line, "[build failed]") || strings.Contains(line, "[setup failed]") {
+				claimed = claimBuild(builds, m[1])
+			}
+			if claimed != nil {
+				all = append(all, found{Failure: Failure{Package: m[1], Name: "(package)", Lines: claimed.lines}, goTest: true})
+			} else if crashed || len(pending) == 0 || !ended {
 				for len(stray) > 0 && strings.TrimSpace(stray[0]) == "" {
 					stray = stray[1:]
 				}
 				if len(stray) > 0 {
-					all = append(all, found{Failure: Failure{Package: m[1], Name: "(package)", Lines: stray}, goTest: true})
+					all = append(all, found{Failure: Failure{Package: m[1], Name: "(package)", Lines: stray, RunningTest: crashTest}, goTest: true})
 				}
 			}
-			pending, cur, out, stray, crashed, ended, ran = nil, -1, "", nil, false, false, false
+			pending, cur, out, stray, crashed, ended, ran, crashTest = nil, -1, "", nil, false, false, false, ""
 			return
 		}
 		if m := doneRE.FindStringSubmatch(line); m != nil {
@@ -244,6 +301,25 @@ func Parse(r io.Reader) (Result, error) {
 			cur = -1
 		}
 		if cur < 0 {
+			// Only compiler output continues a block; anything else, such as a
+			// panic from the next package, is not the build's.
+			if build != nil && !buildLineRE.MatchString(line) {
+				build = nil
+			}
+			if m := buildHeaderRE.FindStringSubmatch(line); m != nil {
+				// vet's "# [pkg]" line goes on with the block of the "# pkg" before it.
+				if strings.HasPrefix(m[1], "[") && build != nil {
+					build.lines = append(build.lines, line)
+					return
+				}
+				build = &buildBlock{pkg: strings.Trim(m[1], "[]"), lines: []string{line}}
+				builds = append(builds, build)
+				return
+			}
+			if build != nil {
+				build.lines = append(build.lines, line)
+				return
+			}
 			stray = append(stray, line)
 			return
 		}
@@ -271,10 +347,35 @@ func Parse(r io.Reader) (Result, error) {
 		}
 	}
 	endTimeout()
+	// Compile errors no package line claimed are kept, not dropped.
+	var unclaimed []string
+	for _, b := range builds {
+		if !b.claimed {
+			unclaimed = append(unclaimed, b.lines...)
+		}
+	}
+	if len(unclaimed) > 0 {
+		all = append(all, found{Failure: Failure{Name: "(build)", Lines: unclaimed}, goTest: true})
+	}
 	res.Failures = dedupe(all)
 	res.Summary = total(summaries)
 	res.Runs = summaries
 	return res, nil
+}
+
+// claimBuild marks and returns the unclaimed block of compile errors that
+// belongs to pkg: the one whose "# pkg" line names it, else the first whose
+// error lines name a file in its directory. nil when none does.
+func claimBuild(builds []*buildBlock, pkg string) *buildBlock {
+	for _, byFile := range []bool{false, true} {
+		for _, b := range builds {
+			if !b.claimed && b.matches(pkg, byFile) {
+				b.claimed = true
+				return b
+			}
+		}
+	}
+	return nil
 }
 
 // summaryOf turns the captured counts of a DONE line into a Summary. An absent
