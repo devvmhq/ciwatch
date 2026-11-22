@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -389,7 +390,7 @@ func TestRunJSON(t *testing.T) {
 func TestRunPassesResolvedSHAToGh(t *testing.T) {
 	app, calls := fake(t, "run-list-success.json", nil, nil) // fake asserts gh gets sha, not HEAD
 	var stdout, stderr bytes.Buffer
-	app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr)
+	app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr)
 	if calls.list != 1 {
 		t.Errorf("gh run list calls = %d, want 1", calls.list)
 	}
@@ -442,7 +443,7 @@ func TestRunMalformedGhOutputCouldNotCheck(t *testing.T) {
 func TestRunDashDashEndsFlags(t *testing.T) {
 	app, calls := fake(t, "run-list-success.json", nil, nil)
 	var stdout, stderr bytes.Buffer
-	if code := app.Run(t.Context(), []string{"--", "HEAD"}, &stdout, &stderr); code != cli.ExitOK || calls.list != 1 {
+	if code := app.Run(t.Context(), []string{"--once", "--", "HEAD"}, &stdout, &stderr); code != cli.ExitOK || calls.list != 1 {
 		t.Errorf("exit code = %d, gh calls = %d, want 0 and 1 (stderr %q)", code, calls.list, stderr.String())
 	}
 }
@@ -566,7 +567,7 @@ func TestRunInProgressPrintsJobs(t *testing.T) {
 func TestRunCallsRunViewOncePerRun(t *testing.T) {
 	app, calls := fake(t, "run-list-success.json", nil, nil)
 	var stdout, stderr bytes.Buffer
-	app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr)
+	app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr)
 	if calls.list != 1 || calls.view != 3 {
 		t.Errorf("calls = %d list and %d view, want 1 and 3", calls.list, calls.view)
 	}
@@ -758,13 +759,15 @@ func TestWatchPollsUntilAllComplete(t *testing.T) {
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
 	}
-	if calls.list != 3 {
-		t.Errorf("gh run list calls = %d, want 3", calls.list)
+	// The runs are old, so after they complete it still waits out the grace
+	// period from the start: six waits and seven lists.
+	if calls.list != 7 {
+		t.Errorf("gh run list calls = %d, want 7", calls.list)
 	}
-	if want := []time.Duration{testInterval, testInterval}; !reflect.DeepEqual(calls.clock.waits, want) {
+	if want := slices.Repeat([]time.Duration{testInterval}, 6); !reflect.DeepEqual(calls.clock.waits, want) {
 		t.Errorf("waits = %v, want %v", calls.clock.waits, want)
 	}
-	if want := []string{"list", "list", "list", "view", "view", "view"}; !reflect.DeepEqual(calls.events, want) {
+	if want := append(slices.Repeat([]string{"list"}, 7), "view", "view", "view"); !reflect.DeepEqual(calls.events, want) {
 		t.Errorf("gh calls = %q, want the jobs fetched once, after the last list: %q", calls.events, want)
 	}
 	var want []row
@@ -839,6 +842,22 @@ func TestWatchRepushedCommitFindsNewRuns(t *testing.T) {
 	}
 	if calls.list < 4 {
 		t.Errorf("gh run list calls = %d, want at least 4: it stopped at the first list, where every run had completed", calls.list)
+	}
+}
+
+func TestWatchGraceShorterThanIntervalStillWaitsAnInterval(t *testing.T) {
+	// The run was created exactly one grace period before ciwatch started, so
+	// its grace period ends at the start.
+	const grace = 5 * time.Second
+	created := strings.ReplaceAll(ciDone, "2026-11-21T21:23:21Z", fixtureNow.Add(-grace).Format(time.RFC3339))
+	app, calls := fakeWith(t, "", nil, nil, fakeOpts{listRaw: []string{list(created)}})
+	app.Grace = grace
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	if got := calls.clock.waited(); got < testInterval {
+		t.Errorf("waited %v, want at least one interval %v", got, testInterval)
 	}
 }
 
