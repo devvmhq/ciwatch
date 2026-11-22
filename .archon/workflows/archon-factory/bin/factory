@@ -1,26 +1,39 @@
 #!/usr/bin/env bash
-# Starts a factory workflow for a dex task, in the background, from the current
-# branch of the project you run it in (unpushed commits included).
+# Starts a factory workflow for a dex task, in the background, and prints
+# Archon's JSON acknowledgement, which holds the run ID.
 #
-#   factory feature <dex-id> [extra `archon workflow run` flags]
-#   factory fix <dex-id> [extra `archon workflow run` flags]
+#   factory feature <dex-id>          build a feature from the current branch
+#   factory fix <dex-id>              fix a bug from the current branch
+#   factory review <dex-id> <run-id>  continue a run whose review hit its cap
 #
-# It prints Archon's JSON acknowledgement, which holds the run ID. Follow the
-# run with `archon workflow logs <run> --follow`, answer its approvals with
-# `archon workflow approve <run> "comment"` or `archon workflow reject <run>
-# "reason"`, and read its state with `archon workflow get <run> --json`.
+# Extra `archon workflow run` flags can follow. Answer approvals with `archon
+# workflow approve <run> "comment"` or `reject <run> "reason"`, follow a run
+# with `archon workflow logs <run> --follow`, and read its state with
+# `archon workflow get <run> --json`.
 set -euo pipefail
 
-usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 [ $# -ge 2 ] || usage
 workflow=$1 task=$2
 shift 2
-case $workflow in feature | fix) ;; *) usage ;; esac
 [[ $task =~ ^[a-z0-9]+$ ]] || { echo "not a dex task ID: '$task'" >&2; exit 2; }
 
-branch=$(git branch --show-current)
-[ -n "$branch" ] || { echo "factory: check out a branch first (HEAD is detached)" >&2; exit 2; }
-
-exec archon workflow run "$workflow" --from "$branch" --input task="$task" --detach --json "$@" \
-  "$workflow dex task $task"
+case $workflow in
+  feature | fix)
+    # From the branch you're on, unpushed commits included.
+    branch=$(git branch --show-current)
+    [ -n "$branch" ] || { echo "factory: check out a branch first (HEAD is detached)" >&2; exit 2; }
+    exec archon workflow run "$workflow" --from "$branch" --input task="$task" --detach --json "$@" \
+      "$workflow dex task $task"
+    ;;
+  review)
+    [ $# -ge 1 ] || usage
+    run=$1
+    shift
+    # A new run, with the pack as it is now, on the capped run's branch.
+    exec archon workflow run review --adopt "$run" --input task="$task" --detach --json "$@" \
+      "review dex task $task, continuing run $run"
+    ;;
+  *) usage ;;
+esac

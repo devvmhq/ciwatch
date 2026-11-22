@@ -8,6 +8,7 @@
   },
   "entrypoints": {
     "feature": "feature/feature.yaml",
-    "fix": "fix/fix.yaml"
+    "fix": "fix/fix.yaml",
+    "review": "review/review.yaml"
   }
 }

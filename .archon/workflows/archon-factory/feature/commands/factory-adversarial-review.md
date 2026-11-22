@@ -9,11 +9,15 @@ The task, as dex JSON:
 
 $task.output
 
+The branch's commits so far, oldest first. Each earlier review round has its own commit listing that round's findings and what was done about each, or why it was disputed:
+
+$history.output
+
 The change (a diff against the commit the work started from; new files included). A file whose diff is very large, such as a recorded fixture, is named at the end instead of shown; read it if your review depends on it:
 
 $diff.output
 
-Read AGENTS.md, then read the changed code in context, not only the diff. Look for:
+Read AGENTS.md, then read the changed code in context, not only the diff. If there were earlier rounds, start by checking that their blocker and major findings are really fixed, and that the fixes broke nothing. Don't raise a finding again that was answered, unless the answer is wrong; say why it is. Then look for:
 
 - **Correctness**: inputs, states or orders of events that give a wrong result, a crash or a hang. Name the concrete input.
 - **Tests**: behaviour the task asks for that no test checks; tests that would still pass if the code were wrong; tests that check internals rather than behaviour.
@@ -22,5 +26,11 @@ Read AGENTS.md, then read the changed code in context, not only the diff. Look f
 - **Conventions**: departures from AGENTS.md.
 
 Only report problems you can point to in the code, each with a fix. Don't report style preferences the project's formatter and linter already settle.
+
+Rate by what users of this project will actually meet:
+
+- **blocker**: the task's main path is wrong, or something is lost or corrupted.
+- **major**: wrong results, crashes or hangs on input the project really sees: what its README, AGENTS.md, the task and its recorded fixtures describe.
+- **minor**: everything else, including input that is possible but that the project doesn't describe or record. Name it, and leave it to the human.
 
 Set `ship` to true only when there is no blocker or major finding left. Minor findings can ship. Put a one-paragraph verdict in `summary`.

@@ -74,12 +74,29 @@ export function isTestPath(path: string): boolean {
   return /(_test\.[a-z]+|\.(test|spec)\.[a-z]+)$|(^|\/)(testdata|tests?|__tests__)\/|(^|\/)test_[^/]*\.py$/.test(path);
 }
 
-// Gets a fresh worktree ready: trusts the project's mise config (the worktree
-// path is new to mise) and records the commit the run started from.
-async function prepare(artifacts: string): Promise<void> {
+// Gets a worktree ready: trusts the project's mise config (the worktree path is
+// new to mise) and records the commit the work started from. A fresh run starts
+// from HEAD; a run that adopts another run's branch (the review workflow)
+// started where that branch left the main checkout's branch.
+async function prepare(artifacts: string, adopted = false): Promise<void> {
   if (existsSync("mise.toml") || existsSync(".mise.toml")) await $`mise trust --quiet`.quiet();
-  const head = (await $`git rev-parse HEAD`.quiet().text()).trim();
-  await writeFile(join(artifacts, "base"), head + "\n");
+  let base = await git(["rev-parse", "HEAD"]);
+  if (adopted) {
+    const main = await root();
+    const branch = await git(["-C", main, "branch", "--show-current"]);
+    base = await git(["merge-base", "HEAD", branch]);
+    if (base === (await git(["rev-parse", "HEAD"]))) throw new Error(`the adopted branch has no commits past ${branch}`);
+  }
+  await writeFile(join(artifacts, "base"), base + "\n");
+}
+
+// The branch's commits since the work started, oldest first, with their full
+// messages: the tests, the implementation and each earlier review round's
+// findings with the answers to them, so a reviewer can build on that.
+async function history(artifacts: string): Promise<string> {
+  const base = (await readFile(join(artifacts, "base"), "utf8")).trim();
+  const log = await git(["log", "--reverse", "--format=commit %h%n%B%n", `${base}..HEAD`]);
+  return log === "" ? "(no commits yet)" : log;
 }
 
 // The run's changes so far, new files included, against the starting commit.
@@ -291,15 +308,19 @@ async function relinkDex(squashed: [string, string][]): Promise<void> {
 
 // Runs one step. Every step but start records the lane first when one is bound.
 export async function step(name: string, a: Args): Promise<void> {
-  if (name === "start") {
+  if (name === "start" || name === "continue") {
     await checkTask(a.task);
-    await prepare(a.artifacts);
+    await prepare(a.artifacts, name === "continue");
     await dex(["start", a.task, "--force"]);
   }
   if (a.lane !== "") await setLane(join(await root(), ".dex"), a.task, a.lane, a.run);
   switch (name) {
     case "start":
+    case "continue":
       console.log(await dex(["show", a.task, "--json"]));
+      return;
+    case "history":
+      console.log(await history(a.artifacts));
       return;
     case "lane":
       return;

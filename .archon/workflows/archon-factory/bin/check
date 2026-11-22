@@ -10,10 +10,12 @@ bun test ./.shared/factory.test.ts
 
 status=0
 for f in scripts/factory.ts commands/factory-adversarial-review.md commands/factory-fix-findings.md commands/factory-commit-message.md; do
-  if ! cmp -s "feature/$f" "fix/$f"; then
-    echo "check: feature/$f and fix/$f differ; they must be copies" >&2
-    status=1
-  fi
+  for w in fix review; do
+    if ! cmp -s "feature/$f" "$w/$f"; then
+      echo "check: feature/$f and $w/$f differ; they must be copies" >&2
+      status=1
+    fi
+  done
 done
 
 shellcheck bin/factory bin/squash bin/check
@@ -26,6 +28,6 @@ git -C "$project" init --quiet
 mkdir -p "$project/.archon/workflows/archon-factory"
 git ls-files --cached --others --exclude-standard |
   tar -cf - -T - | tar -xf - -C "$project/.archon/workflows/archon-factory"
-(cd "$project" && archon validate workflows feature && archon validate workflows fix) 2>&1 | grep -v '^{"level"' || status=1
+(cd "$project" && archon validate workflows feature && archon validate workflows fix && archon validate workflows review) 2>&1 | grep -v '^{"level"' || status=1
 
 exit "$status"

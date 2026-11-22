@@ -74,8 +74,14 @@ nodes:
           runtime: bun
           with: { step: diff, task: $INPUTS.task, lane: review }
 
+        # The branch's commit messages, earlier rounds' findings included.
+        - id: history
+          script: factory
+          runtime: bun
+          with: { step: history, task: $INPUTS.task, lane: "" }
+
         - id: review
-          depends_on: [diff]
+          depends_on: [diff, history]
           command: factory-adversarial-review
           model: opus
           allowed_tools: [Read, Grep, Glob]
