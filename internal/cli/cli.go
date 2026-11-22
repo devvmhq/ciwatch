@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"text/tabwriter"
+	"time"
 
 	"github.com/devvmhq/ciwatch/internal/gh"
 )
@@ -23,25 +24,39 @@ const (
 	ExitUnchecked = 4
 )
 
-const usage = `usage: ciwatch [--json] <commit>
+const usage = `usage: ciwatch [--json] [--once] <commit>
 
 Watches every GitHub Actions run for a commit until it finishes.
 `
 
+// Clock is the time, which tests control.
+type Clock interface {
+	Now() time.Time
+	After(d time.Duration) <-chan time.Time
+}
+
+type realClock struct{}
+
+func (realClock) Now() time.Time                         { return time.Now() }
+func (realClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
+
 // App is ciwatch with its dependencies.
 type App struct {
-	GH gh.Runner
+	GH       gh.Runner
+	Clock    Clock
+	Interval time.Duration // between polls
+	Grace    time.Duration // after the push, during which late runs are still looked for
 }
 
 // New returns an App that runs the real gh and git.
 func New() App {
-	return App{GH: gh.Runner{Exec: gh.Exec}}
+	return App{GH: gh.Runner{Exec: gh.Exec}, Clock: realClock{}, Interval: 10 * time.Second, Grace: 60 * time.Second}
 }
 
 // Run runs ciwatch with args (without the program name), writing its output to
 // stdout and its errors to stderr, and returns the exit code.
 func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	commit, asJSON, err := parseArgs(args)
+	opts, err := parseArgs(args)
 	if err != nil {
 		if !errors.Is(err, errUsage) && !errors.Is(err, flag.ErrHelp) {
 			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
@@ -49,8 +64,9 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		_, _ = fmt.Fprint(stderr, usage)
 		return ExitUsage
 	}
+	asJSON := opts.json
 
-	sha, err := a.GH.ResolveCommit(ctx, commit)
+	sha, err := a.GH.ResolveCommit(ctx, opts.commit)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 		if errors.Is(err, gh.ErrBadRevision) {
@@ -58,13 +74,9 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		}
 		return ExitUnchecked
 	}
-	runs, err := a.GH.RunList(ctx, sha)
+	runs, err := a.watch(ctx, sha, opts.once, stderr)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
-		return ExitUnchecked
-	}
-	if len(runs) == 0 {
-		_, _ = fmt.Fprintf(stderr, "ciwatch: no runs found for %s\n", sha)
 		return ExitUnchecked
 	}
 
@@ -96,7 +108,7 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 
 	code, pending := exitCode(runs)
 	if pending > 0 {
-		_, _ = fmt.Fprintf(stderr, "ciwatch: %d runs still in progress\n", pending)
+		_, _ = fmt.Fprintf(stderr, "ciwatch: %d runs still in progress; drop --once to wait for them\n", pending)
 	}
 	if code == ExitOK && len(runs) >= gh.RunListLimit {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: gh listed %d runs, the most it returns, so there may be more; can't vouch for a pass\n", len(runs))
@@ -115,15 +127,23 @@ type runWithJobs struct {
 
 var errUsage = errors.New("usage")
 
-// parseArgs accepts --json and one commit, in either order.
-func parseArgs(args []string) (commit string, asJSON bool, err error) {
+type options struct {
+	commit string
+	json   bool
+	once   bool
+}
+
+// parseArgs accepts --json, --once and one commit, in any order.
+func parseArgs(args []string) (options, error) {
+	var o options
 	fs := flag.NewFlagSet("ciwatch", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	fs.BoolVar(&asJSON, "json", false, "")
+	fs.BoolVar(&o.json, "json", false, "")
+	fs.BoolVar(&o.once, "once", false, "")
 	var positional []string
 	for {
 		if err := fs.Parse(args); err != nil {
-			return "", false, err
+			return options{}, err
 		}
 		args = fs.Args()
 		if len(args) == 0 {
@@ -137,9 +157,88 @@ func parseArgs(args []string) (commit string, asJSON bool, err error) {
 		args = args[1:]
 	}
 	if len(positional) != 1 {
-		return "", false, errUsage
+		return options{}, errUsage
 	}
-	return positional[0], asJSON, nil
+	o.commit = positional[0]
+	return o, nil
+}
+
+// watch lists the runs for sha and, unless once, keeps listing them until
+// every run has completed and the grace period is over, writing a line to w
+// for each change (none with once). The grace period counts from the earliest run's creation,
+// or from the start if there are no runs yet. With once it lists a single
+// time, and an empty list is an error either way.
+func (a App) watch(ctx context.Context, sha string, once bool, w io.Writer) ([]gh.Run, error) {
+	start := a.Clock.Now()
+	var prev []gh.Run
+	for {
+		runs, err := a.GH.RunList(ctx, sha)
+		if err != nil {
+			return nil, err
+		}
+		if once {
+			if len(runs) == 0 {
+				return nil, fmt.Errorf("no runs found for %s", sha)
+			}
+			return runs, nil
+		}
+		progress(w, prev, runs)
+		prev = runs
+		if len(runs) > 0 && allCompleted(runs) && !a.Clock.Now().Before(anchor(runs, start).Add(a.Grace)) {
+			return runs, nil
+		}
+		if len(runs) == 0 && !a.Clock.Now().Before(start.Add(a.Grace)) {
+			return nil, fmt.Errorf("no runs found for %s", sha)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-a.Clock.After(a.Interval):
+		}
+	}
+}
+
+func allCompleted(runs []gh.Run) bool {
+	for _, r := range runs {
+		if r.Status != "completed" {
+			return false
+		}
+	}
+	return true
+}
+
+// anchor is when the push happened, as far as the runs say: the earliest
+// creation time, or start if there are no runs or no times.
+func anchor(runs []gh.Run, start time.Time) time.Time {
+	var earliest time.Time
+	for _, r := range runs {
+		if !r.Created.IsZero() && (earliest.IsZero() || r.Created.Before(earliest)) {
+			earliest = r.Created
+		}
+	}
+	if earliest.IsZero() {
+		return start
+	}
+	return earliest
+}
+
+// progress writes a line for each run in cur that is new or whose status or
+// conclusion differs from prev.
+func progress(w io.Writer, prev, cur []gh.Run) {
+	old := make(map[int64]gh.Run, len(prev))
+	for _, r := range prev {
+		old[r.ID] = r
+	}
+	for _, r := range cur {
+		if p, ok := old[r.ID]; ok && p.Status == r.Status && p.Conclusion == r.Conclusion {
+			continue
+		}
+		line := r.Status
+		if r.Conclusion != "" {
+			line += " " + r.Conclusion
+		}
+		_, _ = fmt.Fprintf(w, "ciwatch: run %d (%s): %s\n", r.ID, r.Workflow, line)
+	}
 }
 
 // exitCode sums up runs as an exit code. pending is the number of runs that

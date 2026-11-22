@@ -492,7 +492,7 @@ func TestRunFullPageOfRunsMayBeTruncated(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			app := inline(tt.out, noJobs)
 			var stdout, stderr bytes.Buffer
-			if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != tt.want {
+			if code := app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr); code != tt.want {
 				t.Errorf("exit code = %d, want %d (stderr %q)", code, tt.want, stderr.String())
 			}
 			if warned := stderr.Len() > 0; warned != tt.wantWarned {
@@ -667,7 +667,7 @@ func TestRunJSONJobsAreAlwaysArrays(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			tt.app().Run(t.Context(), []string{"HEAD", "--json"}, &stdout, &stderr)
+			tt.app().Run(t.Context(), []string{"--once", "HEAD", "--json"}, &stdout, &stderr)
 			var got struct {
 				Runs []map[string]json.RawMessage `json:"runs"`
 			}

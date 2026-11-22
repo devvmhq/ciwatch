@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // RunListLimit is how many runs RunList asks for. A list this long may have
@@ -33,6 +34,7 @@ type Run struct {
 	Status     string
 	Conclusion string
 	URL        string
+	Created    time.Time
 }
 
 // Job is one job of a workflow run.
@@ -63,16 +65,17 @@ func Exec(ctx context.Context, name string, args ...string) ([]byte, error) {
 // RunList lists the workflow runs for the commit sha, once.
 func (r Runner) RunList(ctx context.Context, sha string) ([]Run, error) {
 	out, err := r.Exec(ctx, "gh", "run", "list", "--commit", sha, "--limit", strconv.Itoa(RunListLimit),
-		"--json", "databaseId,workflowName,status,conclusion,url")
+		"--json", "databaseId,workflowName,status,conclusion,url,createdAt")
 	if err != nil {
 		return nil, fmt.Errorf("gh run list: %w", err)
 	}
 	var raw []struct {
-		ID         int64  `json:"databaseId"`
-		Workflow   string `json:"workflowName"`
-		Status     string `json:"status"`
-		Conclusion string `json:"conclusion"`
-		URL        string `json:"url"`
+		ID         int64     `json:"databaseId"`
+		Workflow   string    `json:"workflowName"`
+		Status     string    `json:"status"`
+		Conclusion string    `json:"conclusion"`
+		URL        string    `json:"url"`
+		Created    time.Time `json:"createdAt"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil {
 		return nil, fmt.Errorf("decoding gh run list output: %w", err)

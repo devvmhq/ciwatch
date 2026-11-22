@@ -15,6 +15,14 @@ It isn't usable yet: the commands are being built one at a time.
 - Offer to rerun a flaky job's failures.
 - Exit 0 only when every run passed, with a different code for failed, cancelled, and couldn't check.
 
+## Usage
+
+```sh
+ciwatch [--json] [--once] <commit>
+```
+
+ciwatch polls until every run for the commit has completed, and keeps looking for new runs for 60 seconds after the push so runs that start late are included. It writes a progress line to stderr whenever a run changes, then prints the final table (or the `--json` document) to stdout. With `--once` it checks a single time instead, and exits 4 if runs are still going.
+
 ## Building
 
 ciwatch needs [mise](https://mise.jdx.dev) and the [GitHub CLI](https://cli.github.com), logged in:
