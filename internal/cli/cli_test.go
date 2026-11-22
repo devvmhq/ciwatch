@@ -42,11 +42,13 @@ const (
 var fixtureNow = time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC)
 
 // fakeClock is the clock the tests control. After never waits: it records d,
-// moves the time on by d, runs the hook, and returns a channel that is ready.
+// moves the time on by d, runs the hook, and returns a channel that is ready,
+// or, with hold, one that never is, so only the context can end the wait.
 type fakeClock struct {
 	now   time.Time
 	waits []time.Duration
 	hook  func()
+	hold  bool
 }
 
 func (c *fakeClock) Now() time.Time { return c.now }
@@ -58,7 +60,9 @@ func (c *fakeClock) After(d time.Duration) <-chan time.Time {
 		c.hook()
 	}
 	ch := make(chan time.Time, 1)
-	ch <- c.now
+	if !c.hold {
+		ch <- c.now
+	}
 	return ch
 }
 
@@ -91,6 +95,7 @@ type fakeOpts struct {
 	listErr      map[int]error // call number (from 1) to the error gh run list fails with
 	now          time.Time     // the fake clock's time, fixtureNow if zero
 	onWait       func()        // runs when the fake clock is waited on
+	holdWait     bool          // the fake clock's wait never ends by itself
 }
 
 func readFixture(t *testing.T, name string) []byte {
@@ -176,6 +181,7 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 	}}}
 	app, c.clock = withClock(app, now)
 	c.clock.hook = opts.onWait
+	c.clock.hold = opts.holdWait
 	return app, c
 }
 
@@ -807,14 +813,49 @@ func TestWatchStopsWhenGraceEnds(t *testing.T) {
 	}
 }
 
-func TestWatchOldCommitDoesNotWait(t *testing.T) {
+func TestWatchOldCommitWaitsGraceOnce(t *testing.T) {
+	// Every run is long finished, but a re-push could still add new ones.
 	app, calls := fake(t, "run-list-success.json", nil, nil)
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
 	}
-	if calls.list != 1 || len(calls.clock.waits) != 0 {
-		t.Errorf("gh run list calls = %d and waits = %v, want 1 and none", calls.list, calls.clock.waits)
+	if got := calls.clock.waited(); got != testGrace {
+		t.Errorf("waited %v, want the grace period %v once, from ciwatch's start", got, testGrace)
+	}
+	if want := int(testGrace/testInterval) + 1; calls.list != want {
+		t.Errorf("gh run list calls = %d, want %d", calls.list, want)
+	}
+}
+
+func TestWatchRepushedCommitFindsNewRuns(t *testing.T) {
+	// CI finished long ago; the re-push's Docs run appears on the third poll.
+	app, calls := fakeWith(t, "", nil, nil, fakeOpts{
+		listRaw: []string{list(ciDone), list(ciDone), list(ciDone, docsQueued), list(ciDone, docsFailed)},
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	if calls.list < 4 {
+		t.Errorf("gh run list calls = %d, want at least 4: it stopped at the first list, where every run had completed", calls.list)
+	}
+}
+
+func TestWatchGraceWaitsAnIntervalWhateverTheClocks(t *testing.T) {
+	// The local clock is two minutes ahead of GitHub's, so the run's createdAt
+	// plus the grace period is already past when ciwatch starts.
+	createdNow := strings.ReplaceAll(ciDone, "2026-11-21T21:23:21Z", fixtureNow.Format(time.RFC3339))
+	app, calls := fakeWith(t, "", nil, nil, fakeOpts{
+		listRaw: []string{list(createdNow), list(createdNow, docsFailed)},
+		now:     fixtureNow.Add(2 * time.Minute),
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	if got := calls.clock.waited(); got < testInterval {
+		t.Errorf("waited %v, want at least one interval %v before the grace period can end", got, testInterval)
 	}
 }
 
@@ -890,10 +931,21 @@ func TestWatchJSONIsOneDocument(t *testing.T) {
 func TestWatchCancelledWhileWaiting(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	app, calls := fakeWith(t, "run-list-in-progress.json", nil, nil, fakeOpts{onWait: cancel})
+	// The wait never ends by itself, so only the ctx.Done() case can return.
+	waiting := make(chan struct{})
+	app, calls := fakeWith(t, "run-list-in-progress.json", nil, nil, fakeOpts{holdWait: true, onWait: func() { close(waiting) }})
 	var stdout, stderr bytes.Buffer
-	if code := app.Run(ctx, []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
-		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, stderr.String())
+	done := make(chan int)
+	go func() { done <- app.Run(ctx, []string{"HEAD"}, &stdout, &stderr) }()
+	<-waiting
+	cancel()
+	select {
+	case code := <-done:
+		if code != cli.ExitUnchecked {
+			t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, stderr.String())
+		}
+	case <-time.After(5 * time.Second): // a failsafe on the real clock, only reached when the bug is
+		t.Fatal("watch did not return after the context was cancelled while it waited")
 	}
 	if !strings.Contains(stderr.String(), "context canceled") {
 		t.Errorf("stderr = %q, want the cancellation", stderr.String())
