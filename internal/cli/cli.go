@@ -78,6 +78,7 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		}
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "ciwatch: can't list jobs for run %d (%s): %v\n", r.ID, r.Workflow, err)
+			withJobs[i].JobsErr = err.Error()
 			continue
 		}
 		withJobs[i].Jobs = jobs
@@ -104,10 +105,12 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	return code
 }
 
-// runWithJobs is a run and its jobs, which are empty if they couldn't be listed.
+// runWithJobs is a run and its jobs. The jobs are empty if they couldn't be
+// listed, and JobsErr then says why.
 type runWithJobs struct {
 	gh.Run
-	Jobs []gh.Job
+	Jobs    []gh.Job
+	JobsErr string
 }
 
 var errUsage = errors.New("usage")
@@ -172,6 +175,9 @@ func writeTable(w io.Writer, runs []runWithJobs) error {
 	_, _ = fmt.Fprintln(tw, "WORKFLOW\tSTATUS\tCONCLUSION")
 	for _, r := range runs {
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", r.Workflow, r.Status, r.Conclusion)
+		if r.JobsErr != "" {
+			_, _ = fmt.Fprintln(tw, "  (jobs unavailable)\t\t")
+		}
 		for _, j := range r.Jobs {
 			_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\n", j.Name, j.Status, j.Conclusion)
 		}
@@ -194,6 +200,7 @@ type jsonRun struct {
 	Conclusion string    `json:"conclusion"`
 	URL        string    `json:"url"`
 	Jobs       []jsonJob `json:"jobs"`
+	JobsError  string    `json:"jobs_error,omitempty"`
 }
 
 func writeJSON(w io.Writer, sha string, runs []runWithJobs) error {
@@ -206,7 +213,7 @@ func writeJSON(w io.Writer, sha string, runs []runWithJobs) error {
 		for k, j := range r.Jobs {
 			jobs[k] = jsonJob(j)
 		}
-		out.Runs[i] = jsonRun{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs}
+		out.Runs[i] = jsonRun{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr}
 	}
 	return json.NewEncoder(w).Encode(out)
 }
