@@ -64,8 +64,6 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		_, _ = fmt.Fprint(stderr, usage)
 		return ExitUsage
 	}
-	asJSON := opts.json
-
 	sha, err := a.GH.ResolveCommit(ctx, opts.commit)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
@@ -96,7 +94,7 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		withJobs[i].Jobs = jobs
 	}
 
-	if asJSON {
+	if opts.json {
 		err = writeJSON(stdout, sha, withJobs)
 	} else {
 		err = writeTable(stdout, withJobs)

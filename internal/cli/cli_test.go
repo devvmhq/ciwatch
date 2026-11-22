@@ -935,3 +935,37 @@ func TestOnceDoesNotWait(t *testing.T) {
 		t.Errorf("stderr = %q, want it to contain %q", stderr.String(), want)
 	}
 }
+
+func TestWatchRunsWithoutTimesCountGraceFromStart(t *testing.T) {
+	noTime := `{"conclusion":"success","databaseId":44951283922,"status":"completed","url":"u","workflowName":"CI"}`
+	app, calls := fakeWith(t, "", nil, nil, fakeOpts{listRaw: []string{list(noTime)}})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	if want := int(testGrace/testInterval) + 1; calls.list != want {
+		t.Errorf("gh run list calls = %d, want %d", calls.list, want)
+	}
+}
+
+func TestOnceWithNoRunsDoesNotWait(t *testing.T) {
+	app, calls := fake(t, "run-list-empty.json", nil, nil)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
+	}
+	if calls.list != 1 || len(calls.clock.waits) != 0 || !strings.Contains(stderr.String(), "no runs found") {
+		t.Errorf("gh run list calls = %d, waits = %v, stderr = %q, want 1, none and no runs found", calls.list, calls.clock.waits, stderr.String())
+	}
+}
+
+func TestWatchFirstListErrorExits(t *testing.T) {
+	app, calls := fakeWith(t, "run-list-success.json", nil, nil, fakeOpts{listErr: map[int]error{1: errors.New("HTTP 401")}})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
+	}
+	if !strings.Contains(stderr.String(), "HTTP 401") || calls.list != 1 || stdout.Len() != 0 {
+		t.Errorf("stderr = %q, list calls = %d, stdout = %q", stderr.String(), calls.list, stdout.String())
+	}
+}
