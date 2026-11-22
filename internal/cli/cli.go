@@ -43,7 +43,7 @@ func New() App {
 func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	commit, asJSON, err := parseArgs(args)
 	if err != nil {
-		if !errors.Is(err, errUsage) {
+		if !errors.Is(err, errUsage) && !errors.Is(err, flag.ErrHelp) {
 			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 		}
 		_, _ = fmt.Fprint(stderr, usage)
@@ -53,7 +53,10 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	sha, err := a.GH.ResolveCommit(ctx, commit)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
-		return ExitUsage
+		if errors.Is(err, gh.ErrBadRevision) {
+			return ExitUsage
+		}
+		return ExitUnchecked
 	}
 	runs, err := a.GH.RunList(ctx, sha)
 	if err != nil {
@@ -78,6 +81,10 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	code, pending := exitCode(runs)
 	if pending > 0 {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %d runs still in progress\n", pending)
+	}
+	if code == ExitOK && len(runs) >= gh.RunListLimit {
+		_, _ = fmt.Fprintf(stderr, "ciwatch: gh listed %d runs, the most it returns, so there may be more; can't vouch for a pass\n", len(runs))
+		return ExitUnchecked
 	}
 	return code
 }
@@ -121,10 +128,11 @@ func exitCode(runs []gh.Run) (code, pending int) {
 			continue
 		}
 		switch r.Conclusion {
-		case "failure", "timed_out", "startup_failure", "action_required":
-			failed = true
+		case "success", "neutral", "skipped":
 		case "cancelled":
 			cancelled = true
+		default: // failure, timed_out, stale, and whatever GitHub adds later
+			failed = true
 		}
 	}
 	switch {

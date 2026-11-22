@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -103,5 +104,28 @@ func TestExecPutsStderrInTheError(t *testing.T) {
 	_, err := gh.Exec(t.Context(), "git", "--no-such-option")
 	if err == nil || !strings.Contains(err.Error(), "no-such-option") {
 		t.Errorf("err = %v, want one containing git's stderr", err)
+	}
+}
+
+func TestResolveCommitErrorKinds(t *testing.T) {
+	tests := []struct {
+		name    string
+		err     error
+		wantBad bool
+	}{
+		{"needed a single revision", errors.New("git: exit status 128: fatal: Needed a single revision"), true},
+		{"bad revision", errors.New("fatal: bad revision 'x'"), true},
+		{"not a repository", errors.New("git: exit status 128: fatal: not a git repository"), false},
+		{"git missing", exec.ErrNotFound, false},
+		{"cancelled", context.Canceled, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) { return nil, tt.err }}
+			_, err := r.ResolveCommit(t.Context(), "x")
+			if err == nil || errors.Is(err, gh.ErrBadRevision) != tt.wantBad {
+				t.Errorf("err = %v, want bad revision = %v", err, tt.wantBad)
+			}
+		})
 	}
 }

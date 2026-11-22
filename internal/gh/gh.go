@@ -6,10 +6,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 )
+
+// RunListLimit is how many runs RunList asks for. A list this long may have
+// been cut off.
+const RunListLimit = 100
+
+// ErrBadRevision marks a ResolveCommit failure caused by the revision itself
+// (unknown or malformed), as opposed to git or the repository being unusable.
+var ErrBadRevision = errors.New("bad revision")
 
 // Runner runs gh and git. Exec is the test seam.
 type Runner struct {
@@ -43,7 +53,7 @@ func Exec(ctx context.Context, name string, args ...string) ([]byte, error) {
 
 // RunList lists the workflow runs for the commit sha, once.
 func (r Runner) RunList(ctx context.Context, sha string) ([]Run, error) {
-	out, err := r.Exec(ctx, "gh", "run", "list", "--commit", sha, "--limit", "100",
+	out, err := r.Exec(ctx, "gh", "run", "list", "--commit", sha, "--limit", strconv.Itoa(RunListLimit),
 		"--json", "databaseId,workflowName,status,conclusion,url")
 	if err != nil {
 		return nil, fmt.Errorf("gh run list: %w", err)
@@ -69,7 +79,13 @@ func (r Runner) RunList(ctx context.Context, sha string) ([]Run, error) {
 func (r Runner) ResolveCommit(ctx context.Context, ref string) (string, error) {
 	out, err := r.Exec(ctx, "git", "rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
 	if err != nil {
-		return "", fmt.Errorf("cannot resolve %q: %w", ref, err)
+		err = fmt.Errorf("cannot resolve %q: %w", ref, err)
+		// git says one of these when the revision is the problem; anything else
+		// (no repository, no git, a cancelled context) is a failure to check.
+		if msg := err.Error(); strings.Contains(msg, "Needed a single revision") || strings.Contains(msg, "bad revision") {
+			return "", errors.Join(ErrBadRevision, err)
+		}
+		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }

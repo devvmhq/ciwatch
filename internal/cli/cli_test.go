@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -223,5 +224,140 @@ func TestRunDashDashEndsFlags(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(t.Context(), []string{"--", "HEAD"}, &stdout, &stderr); code != cli.ExitOK || *calls != 1 {
 		t.Errorf("exit code = %d, gh calls = %d, want 0 and 1 (stderr %q)", code, *calls, stderr.String())
+	}
+}
+
+func TestRunGitFailuresThatAreNotBadRevisions(t *testing.T) {
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	tests := []struct {
+		name   string
+		ctx    context.Context
+		gitErr error
+	}{
+		{"not a git repository", t.Context(), errors.New("git: exit status 128: fatal: not a git repository (or any of the parent directories): .git")},
+		{"git missing", t.Context(), exec.ErrNotFound},
+		{"context cancelled", canceled, context.Canceled},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app, calls := fake(t, "", nil, tt.gitErr)
+			var stdout, stderr bytes.Buffer
+			if code := app.Run(tt.ctx, []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+				t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, stderr.String())
+			}
+			if *calls != 0 {
+				t.Errorf("gh calls = %d, want 0", *calls)
+			}
+		})
+	}
+}
+
+func TestRunFullPageOfRunsMayBeTruncated(t *testing.T) {
+	run := func(conclusion string) string {
+		return `{"databaseId":1,"workflowName":"w","status":"completed","conclusion":"` + conclusion + `","url":"u"}`
+	}
+	page := func(first string) string {
+		runs := []string{first}
+		for len(runs) < 100 {
+			runs = append(runs, run("success"))
+		}
+		return "[" + strings.Join(runs, ",") + "]"
+	}
+	tests := []struct {
+		name       string
+		out        string
+		want       int
+		wantWarned bool
+	}{
+		{"all pass but maybe more", page(run("success")), cli.ExitUnchecked, true},
+		{"failure is already known", page(run("failure")), cli.ExitFailed, false},
+		{"cancellation is already known", page(run("cancelled")), cli.ExitCancelled, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := cli.App{GH: gh.Runner{Exec: func(_ context.Context, name string, _ ...string) ([]byte, error) {
+				if name == "git" {
+					return []byte(sha + "\n"), nil
+				}
+				return []byte(tt.out), nil
+			}}}
+			var stdout, stderr bytes.Buffer
+			if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != tt.want {
+				t.Errorf("exit code = %d, want %d (stderr %q)", code, tt.want, stderr.String())
+			}
+			if warned := stderr.Len() > 0; warned != tt.wantWarned {
+				t.Errorf("stderr = %q, want a warning = %v", stderr.String(), tt.wantWarned)
+			}
+		})
+	}
+}
+
+func TestRunOnlySuccessNeutralAndSkippedPass(t *testing.T) {
+	tests := []struct {
+		conclusion string
+		want       int
+	}{
+		{"success", cli.ExitOK},
+		{"neutral", cli.ExitOK},
+		{"skipped", cli.ExitOK},
+		{"stale", cli.ExitFailed},
+		{"", cli.ExitFailed},
+		{"something_github_adds_later", cli.ExitFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.conclusion, func(t *testing.T) {
+			out := `[{"databaseId":1,"workflowName":"w","status":"completed","conclusion":"` + tt.conclusion + `","url":"u"}]`
+			app := cli.App{GH: gh.Runner{Exec: func(_ context.Context, name string, _ ...string) ([]byte, error) {
+				if name == "git" {
+					return []byte(sha + "\n"), nil
+				}
+				return []byte(out), nil
+			}}}
+			var stdout, stderr bytes.Buffer
+			if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != tt.want {
+				t.Errorf("exit code = %d, want %d", code, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunInProgressPrintsTable(t *testing.T) {
+	app, _ := fake(t, "run-list-in-progress.json", nil, nil)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	want := [][]string{
+		{"WORKFLOW", "STATUS", "CONCLUSION"},
+		{"Fuzz", "in_progress"},
+		{"CI", "completed", "success"},
+	}
+	if len(lines) != len(want) {
+		t.Fatalf("stdout = %q, want %d lines", stdout.String(), len(want))
+	}
+	for i, l := range lines {
+		if got := strings.Fields(l); !reflect.DeepEqual(got, want[i]) {
+			t.Errorf("line %d = %q, want fields %q", i, l, want[i])
+		}
+	}
+}
+
+func TestRunHelpPrintsOnlyUsage(t *testing.T) {
+	for _, flag := range []string{"-h", "--help"} {
+		t.Run(flag, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := cli.App{}.Run(t.Context(), []string{flag}, &stdout, &stderr)
+			if code != cli.ExitUsage {
+				t.Errorf("exit code = %d, want %d", code, cli.ExitUsage)
+			}
+			if !strings.HasPrefix(stderr.String(), "usage: ciwatch") {
+				t.Errorf("stderr = %q, want it to start with the usage", stderr.String())
+			}
+			if stdout.Len() != 0 {
+				t.Errorf("stdout = %q, want nothing", stdout.String())
+			}
+		})
 	}
 }
