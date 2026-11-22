@@ -72,8 +72,8 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	for i, r := range runs {
 		withJobs[i].Run = r
 		jobs, err := a.GH.RunJobs(ctx, r.ID)
-		if ctx.Err() != nil {
-			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", ctx.Err())
+		if err != nil && ctx.Err() != nil { // Ctrl-C: no partial table, and no warning per remaining run
+			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 			return ExitUnchecked
 		}
 		if err != nil {

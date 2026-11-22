@@ -590,6 +590,9 @@ func TestRunCancelledWhileFetchingJobs(t *testing.T) {
 	if stdout.Len() != 0 {
 		t.Errorf("stdout = %q, want nothing", stdout.String())
 	}
+	if !strings.Contains(stderr.String(), "context canceled") || strings.Contains(stderr.String(), "can't list jobs") {
+		t.Errorf("stderr = %q, want the cancellation and no per-run warning", stderr.String())
+	}
 }
 
 func TestRunHelpPrintsOnlyUsage(t *testing.T) {
