@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +38,10 @@ var networkMarkers = []string{
 	"error connecting to api.github.com",
 }
 
+// quotedURL is a URL gh quotes in an error, in quotes or parentheses. It names
+// what was asked for, not what went wrong, so the markers aren't looked for in it.
+var quotedURL = regexp.MustCompile(`https?://[^")\s]*`)
+
 var temporaryMarkers = []string{"HTTP 502", "HTTP 503", "HTTP 504"}
 
 // marked is err that also matches the sentinel kind under errors.Is. Its text
@@ -50,13 +55,14 @@ func (m marked) Error() string   { return m.err.Error() }
 func (m marked) Unwrap() []error { return []error{m.kind, m.err} }
 
 // markNetwork marks err with ErrNetwork or ErrTemporary when its text says the
-// failure was a network error or a temporary GitHub one. Context errors are
-// never marked.
+// failure was a network error or a temporary GitHub one. The markers are looked
+// for in gh's message only, not in the URLs it quotes. Context errors are never
+// marked.
 func markNetwork(err error) error {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	msg := err.Error()
+	msg := quotedURL.ReplaceAllString(err.Error(), "")
 	for _, m := range networkMarkers {
 		if strings.Contains(msg, m) {
 			return marked{ErrNetwork, err}

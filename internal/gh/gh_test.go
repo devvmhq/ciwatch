@@ -313,3 +313,20 @@ func TestRunJobsMarksNetworkErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestMarkNetworkIgnoresMarkersInURLs(t *testing.T) {
+	// A 404 whose URL quotes a marker (here a path that says no such host) is not a network error.
+	err := errors.New("gh: exit status 1: HTTP 404: Not Found (https://api.github.com/repos/devvmhq/no such host/actions/runs?per_page=100)")
+	r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) { return nil, err }}
+	for name, call := range map[string]func() error{
+		"run list": func() error { _, err := r.RunList(t.Context(), sha); return err },
+		"run view": func() error { _, err := r.RunJobs(t.Context(), 1); return err },
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := call()
+			if errors.Is(got, gh.ErrNetwork) || errors.Is(got, gh.ErrTemporary) {
+				t.Errorf("err = %v, want it unmarked: the marker is only in a URL", got)
+			}
+		})
+	}
+}

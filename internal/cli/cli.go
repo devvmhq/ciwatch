@@ -108,6 +108,7 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			continue
 		}
 		withJobs[i].Jobs = jobs
+		jobsApp.Retries = a.Retries // a call got through, so the network is back: full retries again
 	}
 
 	if opts.json {

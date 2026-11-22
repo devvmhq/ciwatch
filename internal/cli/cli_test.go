@@ -1202,6 +1202,24 @@ func TestRunJobsGivesUpOnceForAllRuns(t *testing.T) {
 	}
 }
 
+func TestRunJobsRetriesAgainAfterACallSucceeds(t *testing.T) {
+	app, calls := fakeWith(t, "run-list-success.json", nil, nil, fakeOpts{
+		// The first run runs out of retries, the second answers, and the third
+		// hits one network error: the network is back, so it must be retried.
+		viewErrCalls: map[string]int{"45017063720": 1000, "44951284032": 1},
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	if n := strings.Count(stdout.String(), "(jobs unavailable)"); n != 1 {
+		t.Errorf("stdout = %q, want (jobs unavailable) for the first run only", stdout.String())
+	}
+	if want := app.Retries + 1 + 1 + 2; calls.view != want { // the first run's tries, the second's call, the third's two
+		t.Errorf("gh run view calls = %d, want %d", calls.view, want)
+	}
+}
+
 func TestNewRetryDefaults(t *testing.T) {
 	app := cli.New()
 	if app.Backoff != time.Second || app.MaxBackoff != 30*time.Second || app.Retries != 8 {
