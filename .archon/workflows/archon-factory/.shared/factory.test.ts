@@ -5,7 +5,44 @@ import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { checkpoint, isTestPath, setLane } from "./factory.ts";
+import { checkpoint, isTestPath, setLane, trimDiff } from "./factory.ts";
+
+describe("trimDiff", () => {
+  const part = (path: string, body: string) =>
+    `diff --git a/${path} b/${path}\nindex 1..2 100644\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1 @@\n+${body}\n`;
+
+  const limits = { longestLine: 100, fileBytes: 1000 };
+
+  test("keeps every file's part when none looks like data or is huge", () => {
+    const diff = part("a.go", "package a") + part("b.go", "package b");
+    expect(trimDiff(diff, limits)).toBe(diff.trimEnd());
+  });
+
+  test("keeps a long file of short lines, such as tests", () => {
+    const tests = part("a_test.go", Array(20).fill("x := 1").join("\n+"));
+    expect(trimDiff(tests, limits)).toBe(tests.trimEnd());
+  });
+
+  test("names a file with a long line instead of showing it, and keeps the rest", () => {
+    const data = part("testdata/run.json", "x".repeat(500));
+    const diff = part("a.go", "package a") + data + part("b.go", "package b");
+    const got = trimDiff(diff, limits);
+    expect(got).toContain("+package a");
+    expect(got).toContain("+package b");
+    expect(got).not.toContain("xxxx");
+    expect(got).toContain(`- testdata/run.json (${data.length} bytes of diff)`);
+    expect(got).toContain("read the file if it matters");
+  });
+
+  test("names a file whose diff is over the byte limit, even with short lines", () => {
+    const huge = part("gen.go", Array(200).fill("x := 1").join("\n+"));
+    expect(trimDiff(huge, limits)).toContain("- gen.go (");
+  });
+
+  test("gives an empty diff for no changes", () => {
+    expect(trimDiff("", limits)).toBe("");
+  });
+});
 
 // A git repo with one commit, as the current directory, and an artifacts folder.
 async function repo(): Promise<{ dir: string; artifacts: string }> {

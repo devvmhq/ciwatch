@@ -88,6 +88,35 @@ async function diff(artifacts: string, options: string[] = []): Promise<string> 
   return (await $`git diff ${options} ${base}`.quiet().text()).trimEnd();
 }
 
+// What a prompt's diff leaves out. Recorded fixtures (a gh run view recording
+// is a 120 KB line of JSON) would otherwise be read again by every reviewer,
+// fixer and message writer, and they dominated a run's tokens. Code, tests
+// included, has short lines and stays in unless its diff is huge.
+export const promptDiffLimits = { longestLine: 2000, fileBytes: 64000 };
+
+// A diff for a prompt: each file's part as it is, except a part that looks like
+// data (a line longer than longestLine) or is over fileBytes, which becomes a
+// line naming the file, so the agent can read it if it matters.
+export function trimDiff(diff: string, limits = promptDiffLimits): string {
+  const kept: string[] = [];
+  const omitted: string[] = [];
+  for (const part of diff.split(/^(?=diff --git )/m).filter((p) => p.trim() !== "")) {
+    const longest = Math.max(...part.split("\n").map((l) => l.length));
+    if (longest <= limits.longestLine && part.length <= limits.fileBytes) {
+      kept.push(part.trimEnd());
+      continue;
+    }
+    const path = /^diff --git a\/(.*?) b\//.exec(part)?.[1] ?? "(unknown file)";
+    omitted.push(`- ${path} (${part.length} bytes of diff)`);
+  }
+  if (omitted.length > 0) {
+    kept.push(
+      `Not shown here, because each file's diff is data (a line over ${limits.longestLine} characters) or over ${limits.fileBytes} bytes; read the file if it matters:\n${omitted.join("\n")}`,
+    );
+  }
+  return kept.join("\n");
+}
+
 // Fail-first: new or changed test files exist, and the suite fails.
 async function red(artifacts: string): Promise<void> {
   const changed = (await diff(artifacts, ["--name-only"])).split("\n").filter(Boolean);
@@ -189,7 +218,7 @@ export async function step(name: string, a: Args): Promise<void> {
     case "red":
       return red(a.artifacts);
     case "diff":
-      console.log(await diff(a.artifacts));
+      console.log(trimDiff(await diff(a.artifacts)));
       return;
     case "summary":
       console.log(`Worktree: ${process.cwd()}\n${await diff(a.artifacts, ["--stat"])}`);

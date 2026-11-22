@@ -9,7 +9,7 @@ The task, as dex JSON:
 
 $task.output
 
-The whole change, as a diff against the commit the work started from:
+The whole change, as a diff against the commit the work started from (a file whose diff is very large, such as a recorded fixture, is named at the end instead of shown):
 
 $final-diff.output
 
