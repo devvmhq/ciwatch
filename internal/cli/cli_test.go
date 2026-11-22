@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -82,14 +83,18 @@ func withClock(app cli.App, now time.Time) (cli.App, *fakeClock) {
 	app.Clock = c
 	app.Interval = testInterval
 	app.Grace = testGrace
+	app.Backoff = time.Second
+	app.MaxBackoff = 30 * time.Second
+	app.Retries = 8
 	return app, c
 }
 
 // fakeOpts changes what the fake gh prints for gh run view <id> --json jobs.
 type fakeOpts struct {
-	viewFixture map[string]string // run id to a fixture other than run-view-<id>.json
-	viewErr     map[string]error  // run id to the error gh run view fails with
-	onView      func(id string)   // runs before gh run view answers
+	viewFixture  map[string]string // run id to a fixture other than run-view-<id>.json
+	viewErr      map[string]error  // run id to the error gh run view fails with
+	onView       func(id string)   // runs before gh run view answers
+	viewErrCalls map[string]int    // run id to how many of its first gh run view calls fail with a network error
 
 	listFixtures []string      // gh run list prints these fixtures, one per call, the last repeated
 	listRaw      []string      // like listFixtures, but the output itself
@@ -120,6 +125,7 @@ func fake(t *testing.T, fixture string, ghErr, gitErr error) (cli.App, *counts) 
 func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) (cli.App, *counts) {
 	t.Helper()
 	c := new(counts)
+	viewCalls := map[string]int{}
 	var lists [][]byte
 	for _, f := range opts.listFixtures {
 		lists = append(lists, readFixture(t, f))
@@ -167,6 +173,10 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 			}
 			if opts.onView != nil {
 				opts.onView(id)
+			}
+			viewCalls[id]++
+			if viewCalls[id] <= opts.viewErrCalls[id] {
+				return nil, networkErr(t)
 			}
 			if err := opts.viewErr[id]; err != nil {
 				return nil, err
@@ -608,14 +618,14 @@ func TestRunJobsDoNotChangeExitCode(t *testing.T) {
 
 func TestRunJobsErrorKeepsRunExitCode(t *testing.T) {
 	app, calls := fakeWith(t, "run-list-failure.json", nil, nil, fakeOpts{
-		viewErr: map[string]error{"44729305066": errors.New("HTTP 502")},
+		viewErr: map[string]error{"44729305066": errors.New("HTTP 401")},
 	})
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
 		t.Errorf("exit code = %d, want %d", code, cli.ExitFailed)
 	}
-	if want := "ciwatch: can't list jobs for run 44729305066 (Fuzz): "; !strings.Contains(stderr.String(), want) || !strings.Contains(stderr.String(), "HTTP 502") {
-		t.Errorf("stderr = %q, want it to contain %q and HTTP 502", stderr.String(), want)
+	if want := "ciwatch: can't list jobs for run 44729305066 (Fuzz): "; !strings.Contains(stderr.String(), want) || !strings.Contains(stderr.String(), "HTTP 401") {
+		t.Errorf("stderr = %q, want it to contain %q and HTTP 401", stderr.String(), want)
 	}
 	if calls.view != 2 {
 		t.Errorf("gh run view calls = %d, want 2, one for each run", calls.view)
@@ -631,7 +641,7 @@ func TestRunJobsErrorKeepsRunExitCode(t *testing.T) {
 
 func TestRunJSONShowsJobsError(t *testing.T) {
 	app, _ := fakeWith(t, "run-list-failure.json", nil, nil, fakeOpts{
-		viewErr: map[string]error{"44729305066": errors.New("HTTP 502")},
+		viewErr: map[string]error{"44729305066": errors.New("HTTP 401")},
 	})
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(t.Context(), []string{"HEAD", "--json"}, &stdout, &stderr); code != cli.ExitFailed {
@@ -647,8 +657,8 @@ func TestRunJSONShowsJobsError(t *testing.T) {
 		t.Fatalf("stdout = %q, want 2 runs", stdout.String())
 	}
 	var msg string
-	if err := json.Unmarshal(got.Runs[0]["jobs_error"], &msg); err != nil || !strings.Contains(msg, "HTTP 502") {
-		t.Errorf("failed run's jobs_error = %s, want a string containing HTTP 502", got.Runs[0]["jobs_error"])
+	if err := json.Unmarshal(got.Runs[0]["jobs_error"], &msg); err != nil || !strings.Contains(msg, "HTTP 401") {
+		t.Errorf("failed run's jobs_error = %s, want a string containing HTTP 401", got.Runs[0]["jobs_error"])
 	}
 	if _, ok := got.Runs[1]["jobs_error"]; ok {
 		t.Errorf("run whose jobs were listed has jobs_error %s, want it omitted", got.Runs[1]["jobs_error"])
@@ -666,7 +676,7 @@ func TestRunJSONJobsAreAlwaysArrays(t *testing.T) {
 		}, false},
 		{"gh run view fails", func() cli.App {
 			app, _ := fakeWith(t, "run-list-failure.json", nil, nil, fakeOpts{
-				viewErr: map[string]error{"44729305066": errors.New("HTTP 502"), "44709305564": errors.New("HTTP 502")},
+				viewErr: map[string]error{"44729305066": errors.New("HTTP 401"), "44709305564": errors.New("HTTP 401")},
 			})
 			return app
 		}, true},
@@ -979,14 +989,14 @@ func TestWatchCancelledWhileWaiting(t *testing.T) {
 
 func TestWatchListErrorMidWatch(t *testing.T) {
 	app, _ := fakeWith(t, "run-list-in-progress.json", nil, nil, fakeOpts{
-		listErr: map[int]error{2: errors.New("HTTP 502")},
+		listErr: map[int]error{2: errors.New("HTTP 401")},
 	})
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
 		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
 	}
-	if !strings.Contains(stderr.String(), "HTTP 502") {
-		t.Errorf("stderr = %q, want HTTP 502", stderr.String())
+	if !strings.Contains(stderr.String(), "HTTP 401") {
+		t.Errorf("stderr = %q, want HTTP 401", stderr.String())
 	}
 	if stdout.Len() != 0 {
 		t.Errorf("stdout = %q, want nothing", stdout.String())
@@ -1038,5 +1048,230 @@ func TestWatchFirstListErrorExits(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "HTTP 401") || calls.list != 1 || stdout.Len() != 0 {
 		t.Errorf("stderr = %q, list calls = %d, stdout = %q", stderr.String(), calls.list, stdout.String())
+	}
+}
+
+// networkErr is the error gh fails with when the network is down, from the
+// recorded stderr.
+func networkErr(t *testing.T) error {
+	t.Helper()
+	return stderrErr(t, "stderr-network-dial.txt")
+}
+
+// stderrErr is the error gh fails with when it prints the recorded stderr.
+func stderrErr(t *testing.T, name string) error {
+	t.Helper()
+	return fmt.Errorf("gh: exit status 1: %s", strings.TrimSpace(string(readFixture(t, name))))
+}
+
+func TestWatchRetriesNetworkError(t *testing.T) {
+	app, calls := fakeWith(t, "run-list-success.json", nil, nil, fakeOpts{
+		listErr: map[int]error{1: networkErr(t)},
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	if calls.list < 2 {
+		t.Errorf("gh run list calls = %d, want 2 or more", calls.list)
+	}
+	if len(calls.clock.waits) == 0 || calls.clock.waits[0] != app.Backoff {
+		t.Errorf("waits = %v, want the first to be %v", calls.clock.waits, app.Backoff)
+	}
+	for _, want := range []string{"gh run list: network error, retrying in 1s (retry 1 of 8)", "can't assign requested address"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Errorf("stderr = %q, want it to contain %q", stderr.String(), want)
+		}
+	}
+}
+
+func TestRetryLineNamesTheCallOnce(t *testing.T) {
+	app, _ := fakeWith(t, "run-list-success.json", nil, nil, fakeOpts{listErr: map[int]error{1: networkErr(t)}})
+	var stdout, stderr bytes.Buffer
+	app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr)
+	want := "ciwatch: gh run list: network error, retrying in 1s (retry 1 of 8): gh: exit status 1: Get "
+	if !strings.Contains(stderr.String(), want) || strings.Contains(stderr.String(), "gh run list: gh run list") {
+		t.Errorf("stderr = %q, want a line starting %q, naming the call once", stderr.String(), want)
+	}
+}
+
+func TestRetryBackoffDoublesAndCaps(t *testing.T) {
+	errs := map[int]error{}
+	for i := 1; i <= 5; i++ {
+		errs[i] = networkErr(t)
+	}
+	app, calls := fakeWith(t, "run-list-success.json", nil, nil, fakeOpts{listErr: errs})
+	app.Backoff = time.Second
+	app.MaxBackoff = 4 * time.Second
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	want := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 4 * time.Second, 4 * time.Second}
+	if len(calls.clock.waits) < len(want) || !reflect.DeepEqual(calls.clock.waits[:len(want)], want) {
+		t.Errorf("waits = %v, want them to start %v", calls.clock.waits, want)
+	}
+}
+
+func TestRetriesRunOutExitsUnchecked(t *testing.T) {
+	app, calls := fakeWith(t, "run-list-success.json", networkErr(t), nil, fakeOpts{})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
+	}
+	if want := app.Retries + 1; calls.list != want {
+		t.Errorf("gh run list calls = %d, want %d", calls.list, want)
+	}
+	if len(calls.clock.waits) != app.Retries {
+		t.Errorf("waits = %v, want %d of them", calls.clock.waits, app.Retries)
+	}
+	if want := "gave up after 8 retries: gh run list: "; !strings.Contains(stderr.String(), want) || strings.Count(stderr.String(), "gh run list") != 9 { // 8 retry lines and the give-up line
+		t.Errorf("stderr = %q, want it to contain %q, naming the call once per line", stderr.String(), want)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing", stdout.String())
+	}
+}
+
+func TestOnceRetriesNetworkError(t *testing.T) {
+	app, calls := fakeWith(t, "run-list-in-progress.json", nil, nil, fakeOpts{
+		listErr: map[int]error{1: networkErr(t)},
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, stderr.String())
+	}
+	if calls.list != 2 || len(calls.clock.waits) != 1 {
+		t.Errorf("gh run list calls = %d and waits = %v, want 2 and one", calls.list, calls.clock.waits)
+	}
+}
+
+func TestRunJobsRetriesNetworkError(t *testing.T) {
+	app, calls := fakeWith(t, "run-list-failure.json", nil, nil, fakeOpts{
+		viewErrCalls: map[string]int{"44729305066": 1},
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "jobs unavailable") {
+		t.Errorf("stdout = %q, want the jobs, not (jobs unavailable)", stdout.String())
+	}
+	want := []row{runRow("Fuzz", "completed", "failure")}
+	want = append(want, jobRowsOf(t, "run-view-44729305066.json")...)
+	want = append(want, runRow("CI", "completed", "success"))
+	want = append(want, jobRowsOf(t, "run-view-44709305564.json")...)
+	checkTable(t, stdout.String(), want)
+	// The watch's poll waits come first; the backoff wait is the last one.
+	if n := len(calls.clock.waits); calls.view != 3 || n == 0 || calls.clock.waits[n-1] != app.Backoff || !strings.Contains(stderr.String(), "gh run view 44729305066: network error, retrying in 1s") {
+		t.Errorf("gh run view calls = %d, waits = %v, stderr = %q, want 3, a last wait of the backoff and the retry line", calls.view, calls.clock.waits, stderr.String())
+	}
+}
+
+func TestRunJobsRetriesRunOutKeepRunExitCode(t *testing.T) {
+	app, calls := fakeWith(t, "run-list-failure.json", nil, nil, fakeOpts{
+		viewErrCalls: map[string]int{"44729305066": 1000},
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "(jobs unavailable)") || !strings.Contains(stderr.String(), "can't list jobs for run 44729305066 (Fuzz): gave up after 8 retries: gh run view 44729305066: ") {
+		t.Errorf("stdout = %q, stderr = %q, want (jobs unavailable) and the gave-up warning", stdout.String(), stderr.String())
+	}
+	if want := app.Retries + 1 + 1; calls.view != want { // the failing run's tries, and the other run's one call
+		t.Errorf("gh run view calls = %d, want %d", calls.view, want)
+	}
+}
+
+func TestRunJobsGivesUpOnceForAllRuns(t *testing.T) {
+	app, calls := fakeWith(t, "run-list-failure.json", nil, nil, fakeOpts{
+		viewErrCalls: map[string]int{"44729305066": 1000, "44709305564": 1000},
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	// The first run uses up the retries; the network is known to be down, so the
+	// second run gets one try and no waits.
+	if want := app.Retries + 1 + 1; calls.view != want {
+		t.Errorf("gh run view calls = %d, want %d", calls.view, want)
+	}
+	if n := strings.Count(stdout.String(), "(jobs unavailable)"); n != 2 {
+		t.Errorf("stdout = %q, want (jobs unavailable) twice", stdout.String())
+	}
+}
+
+func TestNewRetryDefaults(t *testing.T) {
+	app := cli.New()
+	if app.Backoff != time.Second || app.MaxBackoff != 30*time.Second || app.Retries != 8 {
+		t.Errorf("Backoff, MaxBackoff, Retries = %v, %v, %d, want 1s, 30s, 8", app.Backoff, app.MaxBackoff, app.Retries)
+	}
+}
+
+func TestRetriesTemporaryErrors(t *testing.T) {
+	for _, name := range []string{"stderr-502.txt", "stderr-503.txt", "stderr-504.txt"} {
+		t.Run(name, func(t *testing.T) {
+			app, calls := fakeWith(t, "run-list-success.json", nil, nil, fakeOpts{
+				listErr: map[int]error{1: stderrErr(t, name)},
+			})
+			var stdout, stderr bytes.Buffer
+			if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+				t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+			}
+			if calls.list < 2 || len(calls.clock.waits) == 0 || calls.clock.waits[0] != app.Backoff {
+				t.Errorf("gh run list calls = %d and waits = %v, want 2 or more and a first wait of %v", calls.list, calls.clock.waits, app.Backoff)
+			}
+			if want := "gh run list: temporary error, retrying in 1s (retry 1 of 8)"; !strings.Contains(stderr.String(), want) {
+				t.Errorf("stderr = %q, want it to contain %q", stderr.String(), want)
+			}
+		})
+	}
+}
+
+func TestCancelledDuringBackoff(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	waiting := make(chan struct{})
+	app, calls := fakeWith(t, "run-list-success.json", networkErr(t), nil, fakeOpts{holdWait: true, onWait: func() { close(waiting) }})
+	var stdout, stderr bytes.Buffer
+	done := make(chan int)
+	go func() { done <- app.Run(ctx, []string{"HEAD"}, &stdout, &stderr) }()
+	<-waiting
+	cancel()
+	select {
+	case code := <-done:
+		if code != cli.ExitUnchecked {
+			t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, stderr.String())
+		}
+	case <-time.After(5 * time.Second): // a failsafe on the real clock, only reached when the bug is
+		t.Fatal("ciwatch did not return after the context was cancelled during a backoff wait")
+	}
+	if !strings.Contains(stderr.String(), "context canceled") {
+		t.Errorf("stderr = %q, want the cancellation", stderr.String())
+	}
+	if calls.list != 1 || len(calls.clock.waits) != 1 {
+		t.Errorf("gh run list calls = %d and waits = %v, want 1 and one: no retry after the cancel", calls.list, calls.clock.waits)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing", stdout.String())
+	}
+}
+
+func TestNonNetworkErrorsFailAtOnce(t *testing.T) {
+	for _, name := range []string{"stderr-401.txt", "stderr-404.txt"} {
+		t.Run(name, func(t *testing.T) {
+			app, calls := fakeWith(t, "run-list-success.json", stderrErr(t, name), nil, fakeOpts{})
+			var stdout, stderr bytes.Buffer
+			if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+				t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
+			}
+			if calls.list != 1 || len(calls.clock.waits) != 0 {
+				t.Errorf("gh run list calls = %d and waits = %v, want 1 and none", calls.list, calls.clock.waits)
+			}
+			if strings.Contains(stderr.String(), "retrying") {
+				t.Errorf("stderr = %q, want no retry line", stderr.String())
+			}
+		})
 	}
 }

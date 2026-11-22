@@ -3,6 +3,7 @@ package gh_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -235,5 +236,80 @@ func TestRunJobsRejectsMalformedOutput(t *testing.T) {
 	}}
 	if _, err := r.RunJobs(t.Context(), 1); err == nil {
 		t.Error("err = nil, want a decoding error")
+	}
+}
+
+// ghFailure is the error Exec returns when gh fails with the recorded stderr.
+func ghFailure(t *testing.T, name string) error {
+	t.Helper()
+	return fmt.Errorf("gh: exit status 1: %s", strings.TrimSpace(string(fixture(t, name))))
+}
+
+func TestRunListMarksNetworkErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		err           func(t *testing.T) error
+		wantNetwork   bool
+		wantTemporary bool
+	}{
+		{"dial", func(t *testing.T) error { return ghFailure(t, "stderr-network-dial.txt") }, true, false},
+		{"no such host", func(t *testing.T) error { return ghFailure(t, "stderr-no-such-host.txt") }, true, false},
+		{"connection reset", func(t *testing.T) error { return ghFailure(t, "stderr-connection-reset.txt") }, true, false},
+		{"error connecting", func(t *testing.T) error { return ghFailure(t, "stderr-error-connecting.txt") }, true, false},
+		{"HTTP 502", func(t *testing.T) error { return ghFailure(t, "stderr-502.txt") }, false, true},
+		{"HTTP 503", func(t *testing.T) error { return ghFailure(t, "stderr-503.txt") }, false, true},
+		{"HTTP 504", func(t *testing.T) error { return ghFailure(t, "stderr-504.txt") }, false, true},
+		{"HTTP 401", func(t *testing.T) error { return ghFailure(t, "stderr-401.txt") }, false, false},
+		{"HTTP 404", func(t *testing.T) error { return ghFailure(t, "stderr-404.txt") }, false, false},
+		{"cancelled", func(*testing.T) error { return context.Canceled }, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want := tt.err(t)
+			r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) { return nil, want }}
+			_, err := r.RunList(t.Context(), sha)
+			if err == nil {
+				t.Fatal("err = nil, want the gh error")
+			}
+			if got := errors.Is(err, gh.ErrNetwork); got != tt.wantNetwork {
+				t.Errorf("errors.Is(err, ErrNetwork) = %v, want %v (err %v)", got, tt.wantNetwork, err)
+			}
+			if got := errors.Is(err, gh.ErrTemporary); got != tt.wantTemporary {
+				t.Errorf("errors.Is(err, ErrTemporary) = %v, want %v (err %v)", got, tt.wantTemporary, err)
+			}
+			if !errors.Is(err, want) {
+				t.Errorf("err = %v, want it to still wrap the gh error", err)
+			}
+		})
+	}
+}
+
+func TestRunJobsMarksNetworkErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		file          string
+		wantNetwork   bool
+		wantTemporary bool
+	}{
+		{"dial", "stderr-network-dial.txt", true, false},
+		{"HTTP 503", "stderr-503.txt", false, true},
+		{"HTTP 404", "stderr-404.txt", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
+				return nil, ghFailure(t, tt.file)
+			}}
+			_, err := r.RunJobs(t.Context(), 1)
+			if err == nil {
+				t.Fatal("err = nil, want the gh error")
+			}
+			if got := errors.Is(err, gh.ErrNetwork); got != tt.wantNetwork {
+				t.Errorf("errors.Is(err, ErrNetwork) = %v, want %v (err %v)", got, tt.wantNetwork, err)
+			}
+			if got := errors.Is(err, gh.ErrTemporary); got != tt.wantTemporary {
+				t.Errorf("errors.Is(err, ErrTemporary) = %v, want %v (err %v)", got, tt.wantTemporary, err)
+			}
+		})
 	}
 }

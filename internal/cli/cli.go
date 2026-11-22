@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -46,11 +47,18 @@ type App struct {
 	Clock    Clock
 	Interval time.Duration // between polls
 	Grace    time.Duration // after the push, during which late runs are still looked for
+
+	Backoff    time.Duration // the first wait before retrying a gh call that failed with a network error
+	MaxBackoff time.Duration // the longest wait; each wait doubles until it reaches this
+	Retries    int           // how many times to retry one gh call
 }
 
 // New returns an App that runs the real gh and git.
 func New() App {
-	return App{GH: gh.Runner{Exec: gh.Exec}, Clock: realClock{}, Interval: 10 * time.Second, Grace: 60 * time.Second}
+	return App{
+		GH: gh.Runner{Exec: gh.Exec}, Clock: realClock{}, Interval: 10 * time.Second, Grace: 60 * time.Second,
+		Backoff: time.Second, MaxBackoff: 30 * time.Second, Retries: 8,
+	}
 }
 
 // Run runs ciwatch with args (without the program name), writing its output to
@@ -79,9 +87,12 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	}
 
 	withJobs := make([]runWithJobs, len(runs))
+	jobsApp := a
 	for i, r := range runs {
 		withJobs[i].Run = r
-		jobs, err := a.GH.RunJobs(ctx, r.ID)
+		jobs, err := retry(ctx, jobsApp, stderr, fmt.Sprintf("gh run view %d", r.ID), func() ([]gh.Job, error) {
+			return a.GH.RunJobs(ctx, r.ID)
+		})
 		if err != nil && ctx.Err() != nil { // Ctrl-C: no partial table, and no warning per remaining run
 			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 			return ExitUnchecked
@@ -89,6 +100,11 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "ciwatch: can't list jobs for run %d (%s): %v\n", r.ID, r.Workflow, err)
 			withJobs[i].JobsErr = err.Error()
+			if errors.Is(err, gh.ErrNetwork) || errors.Is(err, gh.ErrTemporary) {
+				// The retries ran out, so the network is likely still down: the
+				// remaining runs get one try each, not a full backoff apiece.
+				jobsApp.Retries = 0
+			}
 			continue
 		}
 		withJobs[i].Jobs = jobs
@@ -169,7 +185,9 @@ func (a App) watch(ctx context.Context, sha string, once bool, w io.Writer) ([]g
 	start := a.Clock.Now()
 	var prev []gh.Run
 	for {
-		runs, err := a.GH.RunList(ctx, sha)
+		runs, err := retry(ctx, a, w, "gh run list", func() ([]gh.Run, error) {
+			return a.GH.RunList(ctx, sha)
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -194,6 +212,44 @@ func (a App) watch(ctx context.Context, sha string, once bool, w io.Writer) ([]g
 			return nil, ctx.Err()
 		case <-a.Clock.After(a.Interval):
 		}
+	}
+}
+
+// retry calls call, and calls it again after a backoff wait while it fails
+// with a network or temporary error, up to a.Retries times. The waits start at
+// a.Backoff and double up to a.MaxBackoff. what names the call in the lines
+// written to w. A cancelled ctx ends it at once with the context's error.
+func retry[T any](ctx context.Context, a App, w io.Writer, what string, call func() (T, error)) (T, error) {
+	wait := a.Backoff
+	for n := 0; ; n++ {
+		v, err := call()
+		if err == nil || ctx.Err() != nil {
+			return v, err
+		}
+		kind := "network"
+		switch {
+		case errors.Is(err, gh.ErrNetwork):
+		case errors.Is(err, gh.ErrTemporary):
+			kind = "temporary"
+		default:
+			return v, err
+		}
+		if n >= a.Retries {
+			var zero T
+			if a.Retries == 0 { // retrying is off here: nothing was retried to give up on
+				return zero, err
+			}
+			return zero, fmt.Errorf("gave up after %d retries: %w", a.Retries, err)
+		}
+		cause := strings.TrimPrefix(err.Error(), what+": ")
+		_, _ = fmt.Fprintf(w, "ciwatch: %s: %s error, retrying in %s (retry %d of %d): %s\n", what, kind, wait, n+1, a.Retries, cause)
+		select {
+		case <-ctx.Done():
+			var zero T
+			return zero, ctx.Err()
+		case <-a.Clock.After(wait):
+		}
+		wait = min(wait*2, a.MaxBackoff)
 	}
 }
 

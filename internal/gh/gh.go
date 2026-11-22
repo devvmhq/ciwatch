@@ -22,6 +22,54 @@ const RunListLimit = 100
 // (unknown or malformed), as opposed to git or the repository being unusable.
 var ErrBadRevision = errors.New("bad revision")
 
+// ErrNetwork marks a gh failure caused by the network (no route, no DNS, a
+// dropped connection), which may pass if tried again.
+var ErrNetwork = errors.New("network error")
+
+// ErrTemporary marks a gh failure where GitHub answered that it is
+// temporarily unavailable (HTTP 502, 503 or 504), which may pass if tried again.
+var ErrTemporary = errors.New("temporary error")
+
+var networkMarkers = []string{
+	"dial tcp", "dial udp", "no such host", "connection refused",
+	"connection reset by peer", "network is unreachable", "i/o timeout",
+	"TLS handshake timeout", "can't assign requested address",
+	"error connecting to api.github.com",
+}
+
+var temporaryMarkers = []string{"HTTP 502", "HTTP 503", "HTTP 504"}
+
+// marked is err that also matches the sentinel kind under errors.Is. Its text
+// is err's alone, so messages don't repeat the kind.
+type marked struct {
+	kind error
+	err  error
+}
+
+func (m marked) Error() string   { return m.err.Error() }
+func (m marked) Unwrap() []error { return []error{m.kind, m.err} }
+
+// markNetwork marks err with ErrNetwork or ErrTemporary when its text says the
+// failure was a network error or a temporary GitHub one. Context errors are
+// never marked.
+func markNetwork(err error) error {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	msg := err.Error()
+	for _, m := range networkMarkers {
+		if strings.Contains(msg, m) {
+			return marked{ErrNetwork, err}
+		}
+	}
+	for _, m := range temporaryMarkers {
+		if strings.Contains(msg, m) {
+			return marked{ErrTemporary, err}
+		}
+	}
+	return err
+}
+
 // Runner runs gh and git. Exec is the test seam.
 type Runner struct {
 	Exec func(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -67,7 +115,7 @@ func (r Runner) RunList(ctx context.Context, sha string) ([]Run, error) {
 	out, err := r.Exec(ctx, "gh", "run", "list", "--commit", sha, "--limit", strconv.Itoa(RunListLimit),
 		"--json", "databaseId,workflowName,status,conclusion,url,createdAt")
 	if err != nil {
-		return nil, fmt.Errorf("gh run list: %w", err)
+		return nil, fmt.Errorf("gh run list: %w", markNetwork(err))
 	}
 	var raw []struct {
 		ID         int64     `json:"databaseId"`
@@ -93,7 +141,7 @@ func (r Runner) RunList(ctx context.Context, sha string) ([]Run, error) {
 func (r Runner) RunJobs(ctx context.Context, runID int64) ([]Job, error) {
 	out, err := r.Exec(ctx, "gh", "run", "view", strconv.FormatInt(runID, 10), "--json", "jobs")
 	if err != nil {
-		return nil, fmt.Errorf("gh run view %d: %w", runID, err)
+		return nil, fmt.Errorf("gh run view %d: %w", runID, markNetwork(err))
 	}
 	var raw struct {
 		Jobs []struct {
