@@ -1,0 +1,15 @@
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9319588Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9319787Z === ^[[33mSKIP^[[0m: internal/vm TestAgentImportCaseOnly (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9320164Z     agentstore_test.go:636: this volume tells names that differ only in case apart
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9320445Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9320625Z === ^[[33mSKIP^[[0m: internal/vm TestAgentImportNamesCollide (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9321030Z     agentstore_test.go:656: this volume tells names that differ only in case apart
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9321302Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9321406Z === ^[[31mFailed^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9321737Z === ^[[31mFAIL^[[0m: internal/vm TestAgentImportFailsWhole (0.01s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9322130Z     agentimport_test.go:957: changed: 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9323082Z     agentimport_test.go:963: changed true: the store has [".claude" ".claude/CLAUDE.md=another" ".claude/skills" ".claude/skills/a.md=a"], want [".claude" ".claude/CLAUDE.md=old" ".claude/skills" ".claude/skills/old.md=old"]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9323765Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9323954Z DONE 4183 tests, 55 skipped, 1 failure in 263.817s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9555960Z ^[[34m[test]^[[0m ^[[31mERROR^[[0m task failed
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9584442Z ##[error]Process completed with exit code 1.

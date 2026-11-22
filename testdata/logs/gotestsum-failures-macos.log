@@ -1,0 +1,14 @@
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2226750Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2226890Z === ^[[33mSKIP^[[0m: internal/vm TestHistoryExportRuns (0.01s)
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2227150Z     opencodedb_test.go:421: no GNU tar
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2227300Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2227500Z === ^[[33mSKIP^[[0m: internal/vm TestHistoryImportCleansOpencode (0.01s)
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2227810Z     opencodedb_test.go:513: no GNU tar
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2227950Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2228020Z === ^[[31mFailed^[[0m
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2228240Z === ^[[31mFAIL^[[0m: internal/vmssh TestPipeSSHGrace (0.99s)
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2228600Z     relay_test.go:117: talking, half closed: the relay ended while the VM talked: EOF
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2228860Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.2228950Z DONE 3100 tests, 50 skipped, 1 failure in 398.868s
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.3992210Z ^[[34m[test]^[[0m ^[[31mERROR^[[0m task failed
+check (macos-latest, UTC)	Run mise run test	2026-11-14T00:23:16.4021780Z ##[error]Process completed with exit code 1.

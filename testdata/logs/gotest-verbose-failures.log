@@ -1,0 +1,18 @@
+=== RUN   TestParent
+=== RUN   TestParent/ok
+=== RUN   TestParent/bad
+    demo_test.go:8: want 1, got 2
+=== RUN   TestParent/bad/deep
+    demo_test.go:9: deep broke
+=== NAME  TestParent
+    demo_test.go:11: parent also failed
+--- FAIL: TestParent (0.00s)
+    --- PASS: TestParent/ok (0.00s)
+    --- FAIL: TestParent/bad (0.00s)
+        --- FAIL: TestParent/bad/deep (0.00s)
+=== RUN   TestSkipped
+    demo_test.go:14: needs KVM
+--- SKIP: TestSkipped (0.00s)
+FAIL
+FAIL	example.com/demo	0.225s
+FAIL

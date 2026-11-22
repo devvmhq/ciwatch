@@ -9,7 +9,8 @@ ciwatch watches every GitHub Actions run for a commit until it finishes, and sho
 | `cmd/ciwatch/` | the entry point; the only `os.Exit` and the only use of the real stdin, stdout and stderr |
 | `internal/cli/` | the command line: arguments, output (a compact table, or `--json`), exit codes |
 | `internal/gh/` | the one runner every `gh` and `git` call goes through, and the decoding of its output |
-| `testdata/` | recorded `gh` output that the tests feed in |
+| `internal/testlog/` | parses failing tests and gotestsum's summary out of a go test log |
+| `testdata/` | recorded `gh` output and CI logs that the tests feed in |
 | `mise.toml`, `.golangci.yml` | pinned tools, tasks and linters |
 | `.archon/` | Archon's settings and the vendored factory pack (`workflows/archon-factory`, from devvmhq/archon-factory), which builds each dex task; never edit the pack here, upgrade it |
 
