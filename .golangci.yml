@@ -1,0 +1,59 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - durationcheck
+    - errchkjson
+    - errorlint
+    - exhaustive
+    - forbidigo
+    - forcetypeassert
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - nolintlint
+    - revive
+    - unconvert
+    - usestdlibvars
+  settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^os\.Exit$
+          msg: return an exit code; only cmd/ciwatch exits.
+        - pattern: ^fmt\.Print(f|ln)?$
+          msg: write to the io.Writer you were given.
+        - pattern: ^os\.(Stdout|Stderr|Stdin)$
+          msg: take the streams as io.Writer/io.Reader; only cmd/ciwatch passes the real ones.
+        - pattern: ^context\.(Background|TODO)$
+          msg: take the caller's ctx.
+        - pattern: ^time\.Sleep$
+          msg: wait through the clock you were given, so tests don't sleep.
+    errchkjson:
+      check-error-free-encoding: true
+      report-no-exported: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path: ^cmd/ciwatch/
+        linters: [forbidigo]
+        text: os\.(Exit|Stdout|Stderr|Stdin)|context\.(Background|TODO)
+      - path: _test\.go$
+        linters: [forcetypeassert]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/devvmhq/ciwatch

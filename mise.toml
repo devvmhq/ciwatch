@@ -1,0 +1,28 @@
+[settings]
+lockfile = true
+
+[env]
+CGO_ENABLED = "0"
+
+[tools]
+go = "1.27.4"
+golangci-lint = "2.15.0"
+gotestsum = "1.13.0"
+
+[tasks.fmt]
+description = "Format Go code"
+run = "golangci-lint fmt"
+
+[tasks.lint]
+description = "Lint the Go code"
+run = "golangci-lint run"
+
+[tasks.test]
+description = "Run the tests with the race detector"
+# The race detector needs cgo.
+env = { CGO_ENABLED = "1" }
+run = "gotestsum -- -race ./..."
+
+[tasks.build]
+description = "Build ./ciwatch"
+run = "go build -o ciwatch ./cmd/ciwatch"
