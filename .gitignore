@@ -1,4 +1,6 @@
 .dex/
+# Project-scoped Archon credentials (archon setup --scope project).
+.archon/.env
 /.claude/
 /ciwatch
 dist/
