@@ -163,9 +163,8 @@ func parseArgs(args []string) (options, error) {
 
 // watch lists the runs for sha and, unless once, keeps listing them until
 // every run has completed and the grace period is over, writing a line to w
-// for each change (none with once). The grace period counts from the earliest run's creation,
-// or from the start if there are no runs yet. With once it lists a single
-// time, and an empty list is an error either way.
+// for each change (none with once). The grace period is described at graceEnd.
+// With once it lists a single time, and an empty list is an error either way.
 func (a App) watch(ctx context.Context, sha string, once bool, w io.Writer) ([]gh.Run, error) {
 	start := a.Clock.Now()
 	var prev []gh.Run
@@ -182,11 +181,13 @@ func (a App) watch(ctx context.Context, sha string, once bool, w io.Writer) ([]g
 		}
 		progress(w, prev, runs)
 		prev = runs
-		if len(runs) > 0 && allCompleted(runs) && !a.Clock.Now().Before(anchor(runs, start).Add(a.Grace)) {
-			return runs, nil
-		}
-		if len(runs) == 0 && !a.Clock.Now().Before(start.Add(a.Grace)) {
-			return nil, fmt.Errorf("no runs found for %s", sha)
+		if over := !a.Clock.Now().Before(a.graceEnd(runs, start)); over {
+			if len(runs) == 0 {
+				return nil, fmt.Errorf("no runs found for %s", sha)
+			}
+			if allCompleted(runs) {
+				return runs, nil
+			}
 		}
 		select {
 		case <-ctx.Done():
@@ -205,19 +206,30 @@ func allCompleted(runs []gh.Run) bool {
 	return true
 }
 
-// anchor is when the push happened, as far as the runs say: the earliest
-// creation time, or start if there are no runs or no times.
-func anchor(runs []gh.Run, start time.Time) time.Time {
-	var earliest time.Time
+// graceEnd is when the period for late runs ends. If a run was created within
+// the grace period before start, the push was just now and the period counts
+// from the earliest such run's creation. Otherwise the commit was pushed
+// earlier (or a run has no time), so it counts from start, which lets a
+// re-push of an old commit show its new runs. Either way it never ends before
+// one interval has passed since start, whatever GitHub's and the local clock say.
+func (a App) graceEnd(runs []gh.Run, start time.Time) time.Time {
+	var recent time.Time
 	for _, r := range runs {
-		if !r.Created.IsZero() && (earliest.IsZero() || r.Created.Before(earliest)) {
-			earliest = r.Created
+		if r.Created.IsZero() || r.Created.Before(start.Add(-a.Grace)) {
+			continue
+		}
+		if recent.IsZero() || r.Created.Before(recent) {
+			recent = r.Created
 		}
 	}
-	if earliest.IsZero() {
-		return start
+	end := start.Add(a.Grace)
+	if !recent.IsZero() {
+		end = recent.Add(a.Grace)
 	}
-	return earliest
+	if floor := start.Add(a.Interval); end.Before(floor) {
+		end = floor
+	}
+	return end
 }
 
 // progress writes a line for each run in cur that is new or whose status or

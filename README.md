@@ -21,7 +21,7 @@ It isn't usable yet: the commands are being built one at a time.
 ciwatch [--json] [--once] <commit>
 ```
 
-ciwatch polls until every run for the commit has completed, and keeps looking for new runs for 60 seconds after the push so runs that start late are included. It writes a progress line to stderr whenever a run changes, then prints the final table (or the `--json` document) to stdout. With `--once` it checks a single time instead, and exits 4 if runs are still going.
+ciwatch polls until every run for the commit has completed, and keeps looking for new runs for 60 seconds after the push so runs that start late are included. If the commit's runs were created longer ago than that (a commit pushed before, or pushed again), it looks for 60 seconds from when ciwatch started instead, so the new push's runs are caught and an old commit waits that long once. It writes a progress line to stderr whenever a run changes, then prints the final table (or the `--json` document) to stdout. With `--once` it checks a single time instead, and exits 4 if runs are still going.
 
 ## Building
 
