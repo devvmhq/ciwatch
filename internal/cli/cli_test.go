@@ -242,8 +242,9 @@ func TestRunPrintsTable(t *testing.T) {
 	want = append(want, runRow("CI", "completed", "success"))
 	want = append(want, jobRowsOf(t, "run-view-44709305564.json")...)
 	checkTable(t, stdout.String(), want)
-	if !strings.Contains(stdout.String(), "FuzzPromisorHostSite") || len(want) != 2+43+5 {
-		t.Errorf("table has %d rows and %q, want the 2 runs and their 48 jobs, with the failed job", len(want), stdout.String())
+	rows := strings.Count(stdout.String(), "\n") - 1 // minus the header
+	if !strings.Contains(stdout.String(), "FuzzPromisorHostSite") || rows != 2+43+5 {
+		t.Errorf("table has %d rows and %q, want the 2 runs and their 48 jobs, with the failed job", rows, stdout.String())
 	}
 }
 
@@ -455,11 +456,15 @@ func TestRunInProgressPrintsJobs(t *testing.T) {
 	want = append(want, jobRowsOf(t, "run-view-44951283922.json")...)
 	checkTable(t, stdout.String(), want)
 	var inProgress, queued int
-	for _, r := range want {
-		switch {
-		case r.job && r.fields[len(r.fields)-1] == "in_progress":
+	for _, l := range strings.Split(stdout.String(), "\n") {
+		f := strings.Fields(l)
+		if !strings.HasPrefix(l, " ") || len(f) == 0 {
+			continue
+		}
+		switch f[len(f)-1] {
+		case "in_progress":
 			inProgress++
-		case r.job && r.fields[len(r.fields)-1] == "queued":
+		case "queued":
 			queued++
 		}
 	}
@@ -524,9 +529,39 @@ func TestRunJobsErrorKeepsRunExitCode(t *testing.T) {
 	if calls.view != 2 {
 		t.Errorf("gh run view calls = %d, want 2, one for each run", calls.view)
 	}
-	want := []row{runRow("Fuzz", "completed", "failure"), runRow("CI", "completed", "success")}
+	want := []row{
+		runRow("Fuzz", "completed", "failure"),
+		{fields: []string{"(jobs", "unavailable)"}, job: true},
+		runRow("CI", "completed", "success"),
+	}
 	want = append(want, jobRowsOf(t, "run-view-44709305564.json")...)
 	checkTable(t, stdout.String(), want)
+}
+
+func TestRunJSONShowsJobsError(t *testing.T) {
+	app, _ := fakeWith(t, "run-list-failure.json", nil, nil, fakeOpts{
+		viewErr: map[string]error{"44729305066": errors.New("HTTP 502")},
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD", "--json"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Errorf("exit code = %d, want %d", code, cli.ExitFailed)
+	}
+	var got struct {
+		Runs []map[string]json.RawMessage `json:"runs"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout %q is not JSON: %v", stdout.String(), err)
+	}
+	if len(got.Runs) != 2 {
+		t.Fatalf("stdout = %q, want 2 runs", stdout.String())
+	}
+	var msg string
+	if err := json.Unmarshal(got.Runs[0]["jobs_error"], &msg); err != nil || !strings.Contains(msg, "HTTP 502") {
+		t.Errorf("failed run's jobs_error = %s, want a string containing HTTP 502", got.Runs[0]["jobs_error"])
+	}
+	if _, ok := got.Runs[1]["jobs_error"]; ok {
+		t.Errorf("run whose jobs were listed has jobs_error %s, want it omitted", got.Runs[1]["jobs_error"])
+	}
 }
 
 func TestRunJSONJobsAreAlwaysArrays(t *testing.T) {
