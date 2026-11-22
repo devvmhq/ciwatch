@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/devvmhq/ciwatch/internal/gh"
 )
@@ -33,8 +34,8 @@ func TestRunListDecodesRecordedOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []gh.Run{
-		{ID: 44729305066, Workflow: "Fuzz", Status: "completed", Conclusion: "failure", URL: "https://github.com/devvmhq/devvm/actions/runs/44729305066"},
-		{ID: 44709305564, Workflow: "CI", Status: "completed", Conclusion: "success", URL: "https://github.com/devvmhq/devvm/actions/runs/44709305564"},
+		{ID: 44729305066, Workflow: "Fuzz", Status: "completed", Conclusion: "failure", URL: "https://github.com/devvmhq/devvm/actions/runs/44729305066", Created: time.Date(2026, 11, 20, 11, 38, 53, 0, time.UTC)},
+		{ID: 44709305564, Workflow: "CI", Status: "completed", Conclusion: "success", URL: "https://github.com/devvmhq/devvm/actions/runs/44709305564", Created: time.Date(2026, 11, 20, 9, 16, 24, 0, time.UTC)},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("runs = %+v, want %+v", got, want)
@@ -42,7 +43,7 @@ func TestRunListDecodesRecordedOutput(t *testing.T) {
 }
 
 func TestRunListPassesCommitAndFields(t *testing.T) {
-	want := []string{"run", "list", "--commit", sha, "--limit", "100", "--json", "databaseId,workflowName,status,conclusion,url"}
+	want := []string{"run", "list", "--commit", sha, "--limit", "100", "--json", "databaseId,workflowName,status,conclusion,url,createdAt"}
 	r := gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
 		if name != "gh" || !reflect.DeepEqual(args, want) {
 			t.Errorf("exec %s %q, want gh %q", name, args, want)
@@ -51,6 +52,30 @@ func TestRunListPassesCommitAndFields(t *testing.T) {
 	}}
 	if _, err := r.RunList(t.Context(), sha); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRunListDecodesCreatedAt(t *testing.T) {
+	var args []string
+	r := gh.Runner{Exec: func(_ context.Context, _ string, a ...string) ([]byte, error) {
+		args = a
+		return fixture(t, "run-list-in-progress.json"), nil
+	}}
+	got, err := r.RunList(t.Context(), sha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(args, " "), "createdAt") {
+		t.Errorf("gh args = %q, want them to ask for createdAt", args)
+	}
+	want := []time.Time{time.Date(2026, 11, 22, 11, 23, 10, 0, time.UTC), time.Date(2026, 11, 21, 21, 23, 21, 0, time.UTC)}
+	if len(got) != len(want) {
+		t.Fatalf("got %d runs, want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		if !got[i].Created.Equal(w) {
+			t.Errorf("run %d created = %v, want %v", i, got[i].Created, w)
+		}
 	}
 }
 
