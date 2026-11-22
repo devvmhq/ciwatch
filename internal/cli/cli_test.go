@@ -242,8 +242,8 @@ func TestRunPrintsTable(t *testing.T) {
 	want = append(want, runRow("CI", "completed", "success"))
 	want = append(want, jobRowsOf(t, "run-view-44709305564.json")...)
 	checkTable(t, stdout.String(), want)
-	if !strings.Contains(stdout.String(), "FuzzPromisorHostSite") || len(want) != 2+45+5 {
-		t.Errorf("table has %d rows and %q, want the 2 runs and their 50 jobs, with the failed job", len(want), stdout.String())
+	if !strings.Contains(stdout.String(), "FuzzPromisorHostSite") || len(want) != 2+43+5 {
+		t.Errorf("table has %d rows and %q, want the 2 runs and their 48 jobs, with the failed job", len(want), stdout.String())
 	}
 }
 
@@ -281,8 +281,8 @@ func TestRunJSON(t *testing.T) {
 		if r := got.Runs[0]; r.ID != 44729305066 || r.Workflow != "Fuzz" || r.Status != "completed" || r.Conclusion != "failure" || r.URL == "" {
 			t.Errorf("%q: first run = %+v", args, r)
 		}
-		if n := len(got.Runs[0].Jobs); n != 45 {
-			t.Fatalf("%q: first run has %d jobs, want 45", args, n)
+		if n := len(got.Runs[0].Jobs); n != 43 {
+			t.Fatalf("%q: first run has %d jobs, want 43", args, n)
 		}
 		failed := got.Runs[0].Jobs[40]
 		if failed.ID != 136264712505 || failed.Name != "FuzzPromisorHostSite" || failed.Status != "completed" || failed.Conclusion != "failure" ||

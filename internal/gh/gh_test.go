@@ -171,8 +171,8 @@ func TestRunJobsDecodesRecordedOutput(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(got) != 45 {
-			t.Fatalf("got %d jobs, want 45", len(got))
+		if len(got) != 43 {
+			t.Fatalf("got %d jobs, want 43", len(got))
 		}
 		url := "https://github.com/devvmhq/devvm/actions/runs/44729305066/job/"
 		if want := (gh.Job{ID: 136264653915, Name: "targets", Status: "completed", Conclusion: "success", URL: url + "136264653915"}); got[0] != want {

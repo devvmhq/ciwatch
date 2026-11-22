@@ -68,10 +68,25 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		return ExitUnchecked
 	}
 
+	withJobs := make([]runWithJobs, len(runs))
+	for i, r := range runs {
+		withJobs[i].Run = r
+		jobs, err := a.GH.RunJobs(ctx, r.ID)
+		if ctx.Err() != nil {
+			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", ctx.Err())
+			return ExitUnchecked
+		}
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "ciwatch: can't list jobs for run %d (%s): %v\n", r.ID, r.Workflow, err)
+			continue
+		}
+		withJobs[i].Jobs = jobs
+	}
+
 	if asJSON {
-		err = writeJSON(stdout, sha, runs)
+		err = writeJSON(stdout, sha, withJobs)
 	} else {
-		err = writeTable(stdout, runs)
+		err = writeTable(stdout, withJobs)
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
@@ -87,6 +102,12 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		return ExitUnchecked
 	}
 	return code
+}
+
+// runWithJobs is a run and its jobs, which are empty if they couldn't be listed.
+type runWithJobs struct {
+	gh.Run
+	Jobs []gh.Job
 }
 
 var errUsage = errors.New("usage")
@@ -146,30 +167,46 @@ func exitCode(runs []gh.Run) (code, pending int) {
 	return ExitOK, 0
 }
 
-func writeTable(w io.Writer, runs []gh.Run) error {
+func writeTable(w io.Writer, runs []runWithJobs) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "WORKFLOW\tSTATUS\tCONCLUSION")
 	for _, r := range runs {
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", r.Workflow, r.Status, r.Conclusion)
+		for _, j := range r.Jobs {
+			_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\n", j.Name, j.Status, j.Conclusion)
+		}
 	}
 	return tw.Flush()
 }
 
-type jsonRun struct {
+type jsonJob struct {
 	ID         int64  `json:"id"`
-	Workflow   string `json:"workflow"`
+	Name       string `json:"name"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`
 	URL        string `json:"url"`
 }
 
-func writeJSON(w io.Writer, sha string, runs []gh.Run) error {
+type jsonRun struct {
+	ID         int64     `json:"id"`
+	Workflow   string    `json:"workflow"`
+	Status     string    `json:"status"`
+	Conclusion string    `json:"conclusion"`
+	URL        string    `json:"url"`
+	Jobs       []jsonJob `json:"jobs"`
+}
+
+func writeJSON(w io.Writer, sha string, runs []runWithJobs) error {
 	out := struct {
 		SHA  string    `json:"sha"`
 		Runs []jsonRun `json:"runs"`
 	}{SHA: sha, Runs: make([]jsonRun, len(runs))}
 	for i, r := range runs {
-		out.Runs[i] = jsonRun(r)
+		jobs := make([]jsonJob, len(r.Jobs))
+		for k, j := range r.Jobs {
+			jobs[k] = jsonJob(j)
+		}
+		out.Runs[i] = jsonRun{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs}
 	}
 	return json.NewEncoder(w).Encode(out)
 }
