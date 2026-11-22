@@ -129,3 +129,86 @@ func TestResolveCommitErrorKinds(t *testing.T) {
 		})
 	}
 }
+
+func TestRunJobsPassesRunIDAndFields(t *testing.T) {
+	want := []string{"run", "view", "44729305066", "--json", "jobs"}
+	r := gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name != "gh" || !reflect.DeepEqual(args, want) {
+			t.Errorf("exec %s %q, want gh %q", name, args, want)
+		}
+		return []byte(`{"jobs":[]}`), nil
+	}}
+	if _, err := r.RunJobs(t.Context(), 44729305066); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunJobsDecodesRecordedOutput(t *testing.T) {
+	view := func(name string) gh.Runner {
+		return gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
+			return fixture(t, name), nil
+		}}
+	}
+	t.Run("all jobs of a successful run", func(t *testing.T) {
+		got, err := view("run-view-44709305564.json").RunJobs(t.Context(), 44709305564)
+		if err != nil {
+			t.Fatal(err)
+		}
+		url := "https://github.com/devvmhq/devvm/actions/runs/44709305564/job/"
+		want := []gh.Job{
+			{ID: 136196796677, Name: "nocgo", Status: "completed", Conclusion: "success", URL: url + "136196796677"},
+			{ID: 136196796835, Name: "nilaway", Status: "completed", Conclusion: "success", URL: url + "136196796835"},
+			{ID: 136196796910, Name: "vuln", Status: "completed", Conclusion: "success", URL: url + "136196796910"},
+			{ID: 136196796943, Name: "check (macos-latest, UTC)", Status: "completed", Conclusion: "success", URL: url + "136196796943"},
+			{ID: 136196797115, Name: "check (ubuntu-latest, America/Los_Angeles)", Status: "completed", Conclusion: "success", URL: url + "136196797115"},
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("jobs = %+v, want %+v", got, want)
+		}
+	})
+	t.Run("a failed job", func(t *testing.T) {
+		got, err := view("run-view-44729305066.json").RunJobs(t.Context(), 44729305066)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 43 {
+			t.Fatalf("got %d jobs, want 43", len(got))
+		}
+		url := "https://github.com/devvmhq/devvm/actions/runs/44729305066/job/"
+		if want := (gh.Job{ID: 136264653915, Name: "targets", Status: "completed", Conclusion: "success", URL: url + "136264653915"}); got[0] != want {
+			t.Errorf("first job = %+v, want %+v", got[0], want)
+		}
+		failed := gh.Job{ID: 136264712505, Name: "FuzzPromisorHostSite", Status: "completed", Conclusion: "failure", URL: url + "136264712505"}
+		if got[40] != failed {
+			t.Errorf("job 40 = %+v, want %+v", got[40], failed)
+		}
+	})
+	t.Run("a run in progress", func(t *testing.T) {
+		got, err := view("run-view-45017063720-in-progress.json").RunJobs(t.Context(), 45017063720)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got[1].Status != "in_progress" || got[1].Conclusion != "" || got[4].Status != "queued" || got[4].Conclusion != "" {
+			t.Errorf("jobs 1 and 4 = %+v and %+v, want in_progress and queued with no conclusion", got[1], got[4])
+		}
+	})
+}
+
+func TestRunJobsReturnsGhError(t *testing.T) {
+	r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
+		return nil, errors.New("HTTP 502")
+	}}
+	_, err := r.RunJobs(t.Context(), 1)
+	if err == nil || !strings.Contains(err.Error(), "HTTP 502") {
+		t.Errorf("err = %v, want one containing HTTP 502", err)
+	}
+}
+
+func TestRunJobsRejectsMalformedOutput(t *testing.T) {
+	r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
+		return []byte("not json"), nil
+	}}
+	if _, err := r.RunJobs(t.Context(), 1); err == nil {
+		t.Error("err = nil, want a decoding error")
+	}
+}

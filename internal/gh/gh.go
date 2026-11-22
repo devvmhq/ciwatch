@@ -35,6 +35,15 @@ type Run struct {
 	URL        string
 }
 
+// Job is one job of a workflow run.
+type Job struct {
+	ID         int64
+	Name       string
+	Status     string
+	Conclusion string
+	URL        string
+}
+
 // Exec runs the command name with args and returns its stdout. When it fails,
 // the error includes the command's stderr.
 func Exec(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -73,6 +82,33 @@ func (r Runner) RunList(ctx context.Context, sha string) ([]Run, error) {
 		runs[i] = Run(x)
 	}
 	return runs, nil
+}
+
+// RunJobs lists the jobs of the latest attempt of the workflow run runID.
+// gh can't narrow the fields inside a job, so the output also has steps and
+// timestamps, which are ignored.
+func (r Runner) RunJobs(ctx context.Context, runID int64) ([]Job, error) {
+	out, err := r.Exec(ctx, "gh", "run", "view", strconv.FormatInt(runID, 10), "--json", "jobs")
+	if err != nil {
+		return nil, fmt.Errorf("gh run view %d: %w", runID, err)
+	}
+	var raw struct {
+		Jobs []struct {
+			ID         int64  `json:"databaseId"`
+			Name       string `json:"name"`
+			Status     string `json:"status"`
+			Conclusion string `json:"conclusion"`
+			URL        string `json:"url"`
+		} `json:"jobs"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, fmt.Errorf("decoding gh run view output: %w", err)
+	}
+	jobs := make([]Job, len(raw.Jobs))
+	for i, x := range raw.Jobs {
+		jobs[i] = Job(x)
+	}
+	return jobs, nil
 }
 
 // ResolveCommit turns ref into a full commit SHA.
