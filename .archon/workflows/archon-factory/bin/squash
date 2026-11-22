@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Squashes each task's stacked commits before a push, so the pushed history has
+# one commit per task. Run it on a clean checkout of the branch you're about to
+# push:
+#
+#   squash [<upstream>]    default: the branch's upstream, such as origin/main
+#
+# Each task's merge commit since <upstream> becomes one commit with the same
+# files and the merge's message, plus the stack's steps. Other commits are kept.
+# The old head is saved under refs/factory/pre-squash/, the task branches keep
+# their stacks, and dex tasks are relinked to the new commits. Nothing is pushed.
+set -euo pipefail
+
+case ${1:-} in -h | --help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; esac
+exec bun "$(cd "$(dirname "$0")/.." && pwd)/.shared/squash.ts" "$@"

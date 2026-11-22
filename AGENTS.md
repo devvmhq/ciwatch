@@ -15,7 +15,7 @@ ciwatch watches every GitHub Actions run for a commit until it finishes, and sho
 
 ## Tasks
 
-`mise run <task>`: `fmt`, `lint`, `test`, `build`, and `factory -- feature|fix <dex-id>` to start a factory run for a task.
+`mise run <task>`: `fmt`, `lint`, `test`, `build`, `factory -- feature|fix <dex-id>` to start a factory run for a task, and `squash` before a push.
 
 ## Rules
 
@@ -42,7 +42,7 @@ ciwatch watches every GitHub Actions run for a commit until it finishes, and sho
 
 ## Commits and tasks
 
-- **Each task lands as a branch of stacked commits and a merge commit:** the failing tests, the implementation, the self-review, each review round (its findings and the answers to them) and any formatting, each committed as its step finishes, then `git merge --no-ff` onto main with a message that sums up the whole change. The merge passes the gate; the failing-tests commit fails it on purpose. Conventional Commits: `type(scope): summary`, types `feat`, `fix`, `docs`, `test`, `refactor`, `style`, `build`, `ci`, `chore`.
+- **Each task lands as a branch of stacked commits and a merge commit:** the failing tests, the implementation, the self-review, each review round (its findings and the answers to them) and any formatting, each committed as its step finishes, then `git merge --no-ff` onto main with a message that sums up the whole change. The merge passes the gate; the failing-tests commit fails it on purpose. Before a push, `mise run squash` turns each task into one commit; the stacks stay on the task branches. Conventional Commits: `type(scope): summary`, types `feat`, `fix`, `docs`, `test`, `refactor`, `style`, `build`, `ci`, `chore`.
 - **Every commit message ends with the trailer** `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
 - **Task IDs from any tracker never go in commit messages, code comments or docs.**
 - **AGENTS.md stays short:** one line per path or rule.

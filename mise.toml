@@ -33,3 +33,7 @@ run = "go build -o ciwatch ./cmd/ciwatch"
 [tasks.factory]
 description = "Start a factory run for a dex task: mise run factory -- feature|fix <dex-id>"
 run = ".archon/workflows/archon-factory/bin/factory"
+
+[tasks.squash]
+description = "Squash each task's stacked commits past the upstream into one commit, before a push"
+run = ".archon/workflows/archon-factory/bin/squash"

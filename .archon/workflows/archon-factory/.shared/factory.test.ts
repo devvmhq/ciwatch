@@ -5,7 +5,26 @@ import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { checkpoint, isTestPath, setLane, trimDiff } from "./factory.ts";
+import { checkpoint, isTestPath, setLane, squash, squashMessage, trimDiff } from "./factory.ts";
+
+describe("squashMessage", () => {
+  test("lists the steps before the trailers", () => {
+    const merge = "feat(a): add A\n\nWhat and why.\n\nCo-Authored-By: Someone <s@example.com>\n";
+    expect(squashMessage(merge, ["test(a): fail", "feat(a): add A"])).toBe(
+      "feat(a): add A\n\nWhat and why.\n\nBuilt in steps:\n- test(a): fail\n- feat(a): add A\n\nCo-Authored-By: Someone <s@example.com>\n",
+    );
+  });
+
+  test("appends the steps when there are no trailers", () => {
+    expect(squashMessage("feat(a): add A\n\nLeft from review:\n- a.go: x\n", ["t"])).toBe(
+      "feat(a): add A\n\nLeft from review:\n- a.go: x\n\nBuilt in steps:\n- t\n",
+    );
+  });
+
+  test("leaves a message alone when there are no steps", () => {
+    expect(squashMessage("fix: x\n", [])).toBe("fix: x\n");
+  });
+});
 
 describe("trimDiff", () => {
   const part = (path: string, body: string) =>
@@ -105,6 +124,56 @@ describe("checkpoint", () => {
   test("refuses a stage it doesn't know", async () => {
     const { artifacts } = await repo();
     await expect(checkpoint(artifacts, "deploy")).rejects.toThrow("unknown stage");
+  });
+});
+
+describe("squash", () => {
+  const start = process.cwd();
+  afterEach(() => process.chdir(start));
+
+  // Lands a task as the factory does: a branch of commits, then a --no-ff merge.
+  async function land(name: string, files: string[]): Promise<void> {
+    await $`git checkout --quiet -b ${name}`.quiet();
+    for (const f of files) {
+      await writeFile(f, `${f}\n`);
+      await $`git add --all && git commit --quiet -m ${`step ${f}`}`.quiet();
+    }
+    await $`git checkout --quiet main && git merge --quiet --no-ff -m ${`feat: ${name}\n\nCo-Authored-By: Someone <s@example.com>`} ${name}`.quiet();
+  }
+
+  test("turns each task's merge into one commit and keeps the rest", async () => {
+    await repo();
+    await $`git update-ref refs/remotes/origin/main HEAD`.quiet();
+    await writeFile("direct.txt", "x\n");
+    await $`git add --all && git commit --quiet -m ${"chore: direct"}`.quiet();
+    await land("one", ["a.txt", "b.txt"]);
+    await land("two", ["c.txt"]);
+    const tree = (await $`git rev-parse HEAD^{tree}`.quiet().text()).trim();
+
+    await squash("origin/main");
+
+    expect((await $`git rev-parse HEAD^{tree}`.quiet().text()).trim()).toBe(tree);
+    expect(await log()).toEqual(["feat: two", "feat: one", "chore: direct", "init"]);
+    expect((await $`git rev-list --merges origin/main..HEAD`.quiet().text()).trim()).toBe("");
+    const one = (await $`git log -1 ${"--format=%B"} HEAD~1`.quiet().text()).trim();
+    expect(one).toBe("feat: one\n\nBuilt in steps:\n- step a.txt\n- step b.txt\n\nCo-Authored-By: Someone <s@example.com>");
+    expect((await $`git for-each-ref ${"--format=%(refname)"} refs/factory/pre-squash/`.quiet().text()).trim()).toMatch(/^refs\/factory\/pre-squash\/main-/);
+    expect((await $`git log -1 ${"--format=%s"} one`.quiet().text()).trim()).toBe("step b.txt");
+  });
+
+  test("refuses a checkout with uncommitted changes", async () => {
+    await repo();
+    await $`git update-ref refs/remotes/origin/main HEAD`.quiet();
+    await writeFile("a.go", "package a\n// changed\n");
+    await expect(squash("origin/main")).rejects.toThrow("commit or stash");
+  });
+
+  test("does nothing when there's nothing past the upstream", async () => {
+    await repo();
+    await $`git update-ref refs/remotes/origin/main HEAD`.quiet();
+    const head = (await $`git rev-parse HEAD`.quiet().text()).trim();
+    await squash("origin/main");
+    expect((await $`git rev-parse HEAD`.quiet().text()).trim()).toBe(head);
   });
 });
 

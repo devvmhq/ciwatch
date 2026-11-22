@@ -16,7 +16,7 @@ for f in scripts/factory.ts commands/factory-adversarial-review.md commands/fact
   fi
 done
 
-shellcheck bin/factory bin/check
+shellcheck bin/factory bin/squash bin/check
 
 # Archon validates workflows in a project, so put the pack in a throwaway one
 # where `archon plugin copy` would.

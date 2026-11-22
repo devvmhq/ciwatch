@@ -7,7 +7,8 @@
 
 import { $ } from "bun";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 $.throws(true);
@@ -199,6 +200,93 @@ async function land(a: Args): Promise<void> {
   await dex(["complete", a.task, "--result", `Landed ${sha} (Archon run ${a.run})`, "--commit", sha]);
   await setLane(join(main, ".dex"), a.task, "done", a.run);
   console.log(sha);
+}
+
+// The message for a task's squashed commit: the merge's message, with the
+// subjects of the stacked commits that built it listed before its trailers.
+export function squashMessage(merge: string, steps: string[]): string {
+  const paragraphs = merge.trim().split(/\n{2,}/);
+  const last = paragraphs[paragraphs.length - 1] ?? "";
+  const trailers = paragraphs.length > 1 && last.split("\n").every((l) => /^[A-Za-z][A-Za-z0-9-]*: \S/.test(l));
+  const out = trailers ? paragraphs.slice(0, -1) : [...paragraphs];
+  if (steps.length > 0) out.push(`Built in steps:\n${steps.map((s) => `- ${s}`).join("\n")}`);
+  if (trailers) out.push(last);
+  return `${out.join("\n\n")}\n`;
+}
+
+async function git(args: string[]): Promise<string> {
+  return (await $`git ${args}`.quiet().text()).trim();
+}
+
+// Squashes each task's stack before a push. Every merge commit on the current
+// branch's first-parent history since upstream becomes one ordinary commit with
+// the merge's tree and squashMessage; other commits are rebuilt as they are. The
+// final tree is unchanged, the old head is kept under refs/factory/pre-squash/,
+// and each dex task linked to a merge is relinked to its squashed commit. The
+// task branches keep their stacks. Pushes nothing.
+export async function squash(upstream: string): Promise<void> {
+  const branch = await git(["symbolic-ref", "--short", "HEAD"]);
+  if ((await $`git status --porcelain --untracked-files=no`.quiet().text()).trim() !== "") {
+    throw new Error("commit or stash your changes first");
+  }
+  const base = await git(["rev-parse", "--verify", upstream]);
+  const head = await git(["rev-parse", "HEAD"]);
+  if ((await $`git merge-base --is-ancestor ${base} ${head}`.quiet().nothrow()).exitCode !== 0) {
+    throw new Error(`${upstream} isn't an ancestor of ${branch}; pull first`);
+  }
+  const commits = (await git(["rev-list", "--first-parent", "--reverse", `${base}..${head}`])).split("\n").filter(Boolean);
+  if (commits.length === 0) {
+    console.log("nothing to squash");
+    return;
+  }
+  const tmp = await mkdtemp(join(tmpdir(), "factory-squash-"));
+  const squashed: [string, string][] = [];
+  let prev = base;
+  try {
+    for (const c of commits) {
+      const parents = (await git(["rev-list", "--parents", "-n1", c])).split(" ").slice(1);
+      let message = await $`git log -1 ${"--format=%B"} ${c}`.quiet().text();
+      if (parents.length > 1) {
+        const steps = (await git(["log", "--reverse", "--format=%s", `${parents[0]}..${parents[1]}`])).split("\n").filter(Boolean);
+        message = squashMessage(message, steps);
+      }
+      const file = join(tmp, "message");
+      await writeFile(file, message);
+      const [name, email, date] = (await $`git log -1 ${"--format=%an%x00%ae%x00%aI"} ${c}`.quiet().text()).trim().split("\0");
+      const env = { ...process.env, GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email, GIT_AUTHOR_DATE: date };
+      const made = (await $`git commit-tree ${`${c}^{tree}`} -p ${prev} -F ${file}`.env(env).quiet().text()).trim();
+      if (parents.length > 1) squashed.push([c, made]);
+      prev = made;
+    }
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+  if ((await git(["rev-parse", `${prev}^{tree}`])) !== (await git(["rev-parse", `${head}^{tree}`]))) {
+    throw new Error("the squashed history's files differ from HEAD's; nothing was changed");
+  }
+  const backup = `refs/factory/pre-squash/${branch}-${Date.now()}`;
+  await git(["update-ref", backup, head]);
+  await git(["update-ref", `refs/heads/${branch}`, prev, head]);
+  console.log(`${branch}: ${commits.length} commits rebuilt, ${squashed.length} tasks squashed; the old head is ${backup}`);
+  for (const [from, to] of squashed) console.log(`  ${from.slice(0, 7)} -> ${to.slice(0, 7)} ${await git(["log", "-1", "--format=%s", to])}`);
+  await relinkDex(squashed);
+}
+
+// Points each dex task linked to a squashed merge at its new commit. A project
+// without dex, or a task dex can't update, gets a warning, not a failure.
+async function relinkDex(squashed: [string, string][]): Promise<void> {
+  if (squashed.length === 0 || !existsSync(join(await root(), ".dex"))) return;
+  try {
+    const tasks: { id: string; metadata?: { commit?: { sha?: string } } }[] = JSON.parse(await dex(["list", "--all", "--json"]));
+    for (const [from, to] of squashed) {
+      for (const t of tasks.filter((t) => t.metadata?.commit?.sha === from)) {
+        await dex(["edit", t.id, "--commit", to]);
+        console.log(`  dex ${t.id} -> ${to.slice(0, 7)}`);
+      }
+    }
+  } catch (err) {
+    console.error(`squash: couldn't relink dex tasks: ${(err as Error).message}`);
+  }
 }
 
 // Runs one step. Every step but start records the lane first when one is bound.

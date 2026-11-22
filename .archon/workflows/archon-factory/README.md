@@ -72,6 +72,19 @@ archon workflow get <run> --verbose             # includes the run's cost
 
 `archon workflow approve` continues the run in the terminal you ran it in. `archon workflow wait` exits 0 even when the run fails, so read `status` from `archon workflow get --json` instead.
 
+## Before a push: squash each task
+
+Locally, each task lands as its stack and a merge commit, so you can review it step by step. The pushed history has one commit per task instead. On a clean checkout of the branch you're about to push, run:
+
+```sh
+.archon/workflows/archon-factory/bin/squash     # squashes everything past the branch's upstream
+git log --oneline @{upstream}..                 # check it, then push
+```
+
+Each task's merge commit since the upstream becomes one ordinary commit with the same files and the merge's message, with the stack's commit subjects listed under `Built in steps:` before the trailers. Other commits are kept as they are. The old head is saved under `refs/factory/pre-squash/`, each task's branch keeps its stack, and the dex tasks linked to the merges are relinked to the new commits. `squash` never pushes.
+
+## Leftovers
+
 A finished run leaves its worktree under `~/.archon/workspaces/<project>/worktrees/`, along with its branch. Archon's bundled `archon-worktree-cleanup` workflow looks like the way to remove them, but the pack hasn't tried it yet.
 
 ## Layout
@@ -82,6 +95,7 @@ A finished run leaves its worktree under `~/.archon/workspaces/<project>/worktre
 | `feature/`, `fix/` | each workflow's YAML, its prompts (`commands/`) and its script (`scripts/factory.ts`) |
 | `.shared/factory.ts` | the steps that aren't AI: dex, lanes, the fail-first check, the diff, the gate, each stage's commit and the landing merge |
 | `bin/factory` | starts a run for a dex task |
+| `bin/squash` | squashes each task's stack before a push (`.shared/squash.ts`) |
 | `bin/check` | the pack's own check (`mise run check`): the tests, the copies, shellcheck and Archon's validation |
 
 A packaged workflow finds prompts and scripts only in its own folder, so `feature/` and `fix/` each hold a copy of `scripts/factory.ts` and of the three prompts they share. `bin/check` fails when the copies differ.
