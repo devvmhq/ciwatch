@@ -84,11 +84,16 @@ type Runner struct {
 // Run is one GitHub Actions workflow run.
 type Run struct {
 	ID         int64
+	WorkflowID int64
 	Workflow   string
 	Status     string
 	Conclusion string
 	URL        string
 	Created    time.Time
+	Updated    time.Time
+	HeadBranch string
+	HeadSHA    string
+	Event      string
 }
 
 // Job is one job of a workflow run.
@@ -116,20 +121,46 @@ func Exec(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
+// BranchRunsLimit is how many runs BranchRuns asks for.
+const BranchRunsLimit = 20
+
+const runFields = "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event"
+
 // RunList lists the workflow runs for the commit sha, once.
 func (r Runner) RunList(ctx context.Context, sha string) ([]Run, error) {
-	out, err := r.Exec(ctx, "gh", "run", "list", "--commit", sha, "--limit", strconv.Itoa(RunListLimit),
-		"--json", "databaseId,workflowName,status,conclusion,url,createdAt")
+	return r.listRuns(ctx, "--commit", sha, "--limit", strconv.Itoa(RunListLimit))
+}
+
+// BranchRuns lists the runs of the workflow workflowID on branch that were
+// created from from to to by the event (push, pull_request...), once. The workflow is named by ID because its name
+// can be a file path, or shared by two workflows, which gh can't select by.
+// The window keeps the list to the runs that matter, however busy the branch.
+func (r Runner) BranchRuns(ctx context.Context, branch string, workflowID int64, event string, from, to time.Time) ([]Run, error) {
+	window := from.UTC().Format(time.RFC3339) + ".." + to.UTC().Format(time.RFC3339)
+	return r.listRuns(ctx, "--branch", branch, "--workflow", strconv.FormatInt(workflowID, 10),
+		"--created", window, "--event", event, "--limit", strconv.Itoa(BranchRunsLimit))
+}
+
+// listRuns runs gh run list with the filter flags and decodes the runs.
+func (r Runner) listRuns(ctx context.Context, filter ...string) ([]Run, error) {
+	args := append([]string{"run", "list"}, filter...)
+	args = append(args, "--json", runFields)
+	out, err := r.Exec(ctx, "gh", args...)
 	if err != nil {
 		return nil, fmt.Errorf("gh run list: %w", markNetwork(err))
 	}
 	var raw []struct {
 		ID         int64     `json:"databaseId"`
+		WorkflowID int64     `json:"workflowDatabaseId"`
 		Workflow   string    `json:"workflowName"`
 		Status     string    `json:"status"`
 		Conclusion string    `json:"conclusion"`
 		URL        string    `json:"url"`
 		Created    time.Time `json:"createdAt"`
+		Updated    time.Time `json:"updatedAt"`
+		HeadBranch string    `json:"headBranch"`
+		HeadSHA    string    `json:"headSha"`
+		Event      string    `json:"event"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil {
 		return nil, fmt.Errorf("decoding gh run list output: %w", err)

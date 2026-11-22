@@ -21,7 +21,7 @@ import (
 
 const sha = "3bb2dccd75a2754b8d45e522b3c26c22bc66a21a"
 
-var ghArgs = []string{"run", "list", "--commit", sha, "--limit", "100", "--json", "databaseId,workflowName,status,conclusion,url,createdAt"}
+var ghArgs = []string{"run", "list", "--commit", sha, "--limit", "100", "--json", "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event"}
 
 // counts is how many times the fake ran gh run list and gh run view, and for
 // which runs.
@@ -29,6 +29,7 @@ type counts struct {
 	list    int
 	view    int
 	viewIDs []string
+	branch  int      // gh run list --branch calls
 	events  []string // "list" and "view", in the order gh ran them
 	clock   *fakeClock
 }
@@ -147,6 +148,9 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 				return nil, gitErr
 			}
 			return []byte(sha + "\n"), nil
+		case name == "gh" && len(args) >= 4 && args[0] == "run" && args[1] == "list" && args[2] == "--branch":
+			c.branch++
+			return []byte("[]"), nil // these tests have no newer push; follow_test.go covers one
 		case name == "gh" && len(args) >= 2 && args[0] == "run" && args[1] == "list":
 			c.list++
 			c.events = append(c.events, "list")
@@ -1291,5 +1295,13 @@ func TestNonNetworkErrorsFailAtOnce(t *testing.T) {
 				t.Errorf("stderr = %q, want no retry line", stderr.String())
 			}
 		})
+	}
+}
+
+func TestUsageNamesFollowOnSeparateLines(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	cli.App{}.Run(t.Context(), nil, &stdout, &stderr)
+	if got := stderr.String(); !strings.Contains(got, "[--follow]") || strings.Contains(got, `\n`) {
+		t.Errorf("stderr = %q, want a usage naming --follow without literal \\n", got)
 	}
 }

@@ -25,10 +25,14 @@ const (
 	ExitUnchecked = 4
 )
 
-const usage = `usage: ciwatch [--json] [--once] <commit>
+const usage = `usage: ciwatch [--json] [--once] [--follow] <commit>
 
-Watches every GitHub Actions run for a commit until it finishes.
+Watches every GitHub Actions run for a commit until it finishes. A run that a
+newer push cancelled is named; with --follow, that commit is watched instead.
 `
+
+// MaxFollowed is the most commits --follow moves on from before it stops.
+const MaxFollowed = 20
 
 // Clock is the time, which tests control.
 type Clock interface {
@@ -80,16 +84,38 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		}
 		return ExitUnchecked
 	}
-	runs, err := a.watch(ctx, sha, opts.once, stderr)
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
-		return ExitUnchecked
+	var followed []string
+	var runs []gh.Run
+	var newer map[int64]string
+	seen := map[string]bool{sha: true} // commits already watched, never followed back to
+	for {
+		runs, err = a.watch(ctx, sha, opts.once, stderr)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
+			return ExitUnchecked
+		}
+		var next string
+		newer, next = a.findSuperseded(ctx, runs, opts.follow && len(followed) < MaxFollowed, seen, stderr)
+		if ctx.Err() != nil { // Ctrl-C during the lookup: no table, and no commit to follow
+			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", ctx.Err())
+			return ExitUnchecked
+		}
+		if next == "" {
+			break
+		}
+		followed = append(followed, sha)
+		sha = next
+		seen[sha] = true
+	}
+	if opts.follow && len(followed) >= MaxFollowed && len(newer) > 0 {
+		_, _ = fmt.Fprintf(stderr, "ciwatch: followed %d commits, the most it follows; stopping at %s, whose runs were cancelled by a newer push too\n", len(followed), short(sha))
 	}
 
 	withJobs := make([]runWithJobs, len(runs))
 	jobsApp := a
 	for i, r := range runs {
 		withJobs[i].Run = r
+		withJobs[i].SupersededBy = newer[r.ID]
 		jobs, err := retry(ctx, jobsApp, stderr, fmt.Sprintf("gh run view %d", r.ID), func() ([]gh.Job, error) {
 			return a.GH.RunJobs(ctx, r.ID)
 		})
@@ -112,7 +138,7 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	}
 
 	if opts.json {
-		err = writeJSON(stdout, sha, withJobs)
+		err = writeJSON(stdout, sha, followed, withJobs)
 	} else {
 		err = writeTable(stdout, withJobs)
 	}
@@ -125,6 +151,13 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	if pending > 0 {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %d runs still in progress; drop --once to wait for them\n", pending)
 	}
+	if !opts.follow {
+		for _, r := range runs {
+			if by := newer[r.ID]; by != "" {
+				_, _ = fmt.Fprintf(stderr, "ciwatch: run %d (%s) was cancelled by a newer push, %s; rerun with --follow to watch it\n", r.ID, r.Workflow, short(by))
+			}
+		}
+	}
 	if code == ExitOK && len(runs) >= gh.RunListLimit {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: gh listed %d runs, the most it returns, so there may be more; can't vouch for a pass\n", len(runs))
 		return ExitUnchecked
@@ -136,8 +169,9 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 // listed, and JobsErr then says why.
 type runWithJobs struct {
 	gh.Run
-	Jobs    []gh.Job
-	JobsErr string
+	Jobs         []gh.Job
+	JobsErr      string
+	SupersededBy string // the commit whose push cancelled the run, if one did
 }
 
 var errUsage = errors.New("usage")
@@ -146,15 +180,17 @@ type options struct {
 	commit string
 	json   bool
 	once   bool
+	follow bool
 }
 
-// parseArgs accepts --json, --once and one commit, in any order.
+// parseArgs accepts --json, --once, --follow and one commit, in any order.
 func parseArgs(args []string) (options, error) {
 	var o options
 	fs := flag.NewFlagSet("ciwatch", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.BoolVar(&o.json, "json", false, "")
 	fs.BoolVar(&o.once, "once", false, "")
+	fs.BoolVar(&o.follow, "follow", false, "")
 	var positional []string
 	for {
 		if err := fs.Parse(args); err != nil {
@@ -214,6 +250,113 @@ func (a App) watch(ctx context.Context, sha string, once bool, w io.Writer) ([]g
 		case <-a.Clock.After(a.Interval):
 		}
 	}
+}
+
+func short(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
+}
+
+// cancelSlack is how long after a cancelled run was last updated a newer push's
+// run may still have been created and count as having cancelled it, which
+// allows for GitHub's and the runner's clocks being a little apart.
+const cancelSlack = time.Minute
+
+// supersededBy finds the run whose push cancelled the cancelled run: the first
+// run of the same workflow on the same branch that was created after run and
+// no later than when run stopped (a concurrency group cancels a run as the
+// newer one is queued), is for another commit and has the same event (a fork's
+// pull request from a branch of the same name is not a push to this one). A later push that came after
+// the run had already been cancelled, say by hand, is not it. ok is false if
+// there is none.
+func (a App) supersededBy(ctx context.Context, run gh.Run, w io.Writer) (by gh.Run, ok bool, err error) {
+	if run.HeadBranch == "" {
+		return gh.Run{}, false, nil
+	}
+	runs, err := retry(ctx, a, w, "gh run list", func() ([]gh.Run, error) {
+		return a.GH.BranchRuns(ctx, run.HeadBranch, run.WorkflowID, run.Event, run.Created, run.Updated.Add(cancelSlack))
+	})
+	if err != nil {
+		return gh.Run{}, false, err
+	}
+	if len(runs) >= gh.BranchRunsLimit && oldestCreated(runs).After(run.Created) {
+		// gh lists newest first and stopped at its limit inside the window, so the
+		// earliest push, the one that did the cancelling, may be cut off.
+		return gh.Run{}, false, fmt.Errorf("gh listed %d runs, the most it returns, so the first newer push may be missing", len(runs))
+	}
+	for _, r := range runs {
+		if !r.Created.After(run.Created) || r.Created.After(run.Updated.Add(cancelSlack)) || r.HeadSHA == run.HeadSHA || r.HeadSHA == "" || r.Event != run.Event {
+			continue
+		}
+		if !ok || r.Created.Before(by.Created) {
+			by, ok = r, true
+		}
+	}
+	return by, ok, nil
+}
+
+func oldestCreated(runs []gh.Run) time.Time {
+	oldest := runs[0].Created
+	for _, r := range runs[1:] {
+		if r.Created.Before(oldest) {
+			oldest = r.Created
+		}
+	}
+	return oldest
+}
+
+// replaced reports whether runs holds a later run of run's workflow for the
+// same commit: the commit was pushed again, so the cancelled run was not left
+// behind for a newer commit.
+func replaced(run gh.Run, runs []gh.Run) bool {
+	for _, r := range runs {
+		if r.HeadSHA == run.HeadSHA && r.WorkflowID == run.WorkflowID && r.Created.After(run.Created) {
+			return true
+		}
+	}
+	return false
+}
+
+// findSuperseded looks for a newer push behind each cancelled run, and returns
+// the commit for each run it found by run ID. next is the commit to follow, if
+// follow is set: the newest of those pushes, unless it is a commit in seen. A
+// cancelled run that a later run of the same commit replaced is not looked
+// into. A lookup that fails is a warning,
+// and the run stays plainly cancelled.
+func (a App) findSuperseded(ctx context.Context, runs []gh.Run, follow bool, seen map[string]bool, w io.Writer) (by map[int64]string, next string) {
+	by = map[int64]string{}
+	var from, nextRun gh.Run
+	lookupApp := a
+	for _, r := range runs {
+		if r.Status != "completed" || r.Conclusion != "cancelled" || replaced(r, runs) {
+			continue
+		}
+		newer, ok, err := lookupApp.supersededBy(ctx, r, w)
+		if err != nil {
+			if ctx.Err() != nil { // Ctrl-C: no warning per remaining run, and nothing to follow
+				return map[int64]string{}, ""
+			}
+			_, _ = fmt.Fprintf(w, "ciwatch: can't look for a newer push after run %d (%s): %v\n", r.ID, r.Workflow, err)
+			if errors.Is(err, gh.ErrNetwork) || errors.Is(err, gh.ErrTemporary) {
+				lookupApp.Retries = 0 // as for jobs: the network is likely still down
+			}
+			continue
+		}
+		lookupApp.Retries = a.Retries
+		if !ok {
+			continue
+		}
+		by[r.ID] = newer.HeadSHA
+		if follow && !seen[newer.HeadSHA] && newer.Created.After(nextRun.Created) {
+			from, nextRun, next = r, newer, newer.HeadSHA
+		}
+	}
+	if next != "" {
+		_, _ = fmt.Fprintf(w, "ciwatch: run %d (%s) was cancelled by a newer push; following %s…\n", from.ID, from.Workflow, short(next))
+	}
+	return by, next
 }
 
 // retry calls call, and calls it again after a backoff wait while it fails
@@ -340,7 +483,11 @@ func writeTable(w io.Writer, runs []runWithJobs) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "WORKFLOW\tSTATUS\tCONCLUSION")
 	for _, r := range runs {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", r.Workflow, r.Status, r.Conclusion)
+		note := ""
+		if r.SupersededBy != "" {
+			note = "  (superseded by " + short(r.SupersededBy) + ")"
+		}
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s%s\n", r.Workflow, r.Status, r.Conclusion, note)
 		if r.JobsErr != "" {
 			_, _ = fmt.Fprintln(tw, "  (jobs unavailable)\t\t")
 		}
@@ -367,19 +514,22 @@ type jsonRun struct {
 	URL        string    `json:"url"`
 	Jobs       []jsonJob `json:"jobs"`
 	JobsError  string    `json:"jobs_error,omitempty"`
+
+	SupersededBy string `json:"superseded_by,omitempty"`
 }
 
-func writeJSON(w io.Writer, sha string, runs []runWithJobs) error {
+func writeJSON(w io.Writer, sha string, followed []string, runs []runWithJobs) error {
 	out := struct {
-		SHA  string    `json:"sha"`
-		Runs []jsonRun `json:"runs"`
-	}{SHA: sha, Runs: make([]jsonRun, len(runs))}
+		SHA          string    `json:"sha"`
+		FollowedFrom []string  `json:"followed_from,omitempty"`
+		Runs         []jsonRun `json:"runs"`
+	}{SHA: sha, FollowedFrom: followed, Runs: make([]jsonRun, len(runs))}
 	for i, r := range runs {
 		jobs := make([]jsonJob, len(r.Jobs))
 		for k, j := range r.Jobs {
 			jobs[k] = jsonJob(j)
 		}
-		out.Runs[i] = jsonRun{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr}
+		out.Runs[i] = jsonRun{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr, SupersededBy: r.SupersededBy}
 	}
 	return json.NewEncoder(w).Encode(out)
 }

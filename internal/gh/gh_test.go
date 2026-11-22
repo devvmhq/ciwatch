@@ -35,8 +35,8 @@ func TestRunListDecodesRecordedOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []gh.Run{
-		{ID: 44729305066, Workflow: "Fuzz", Status: "completed", Conclusion: "failure", URL: "https://github.com/devvmhq/devvm/actions/runs/44729305066", Created: time.Date(2026, 11, 20, 11, 38, 53, 0, time.UTC)},
-		{ID: 44709305564, Workflow: "CI", Status: "completed", Conclusion: "success", URL: "https://github.com/devvmhq/devvm/actions/runs/44709305564", Created: time.Date(2026, 11, 20, 9, 16, 24, 0, time.UTC)},
+		{ID: 44729305066, WorkflowID: 409041459, Workflow: "Fuzz", Status: "completed", Conclusion: "failure", URL: "https://github.com/devvmhq/devvm/actions/runs/44729305066", Created: time.Date(2026, 11, 20, 11, 38, 53, 0, time.UTC), Updated: time.Date(2026, 11, 20, 12, 13, 8, 0, time.UTC), Event: "push"},
+		{ID: 44709305564, WorkflowID: 409041453, Workflow: "CI", Status: "completed", Conclusion: "success", URL: "https://github.com/devvmhq/devvm/actions/runs/44709305564", Created: time.Date(2026, 11, 20, 9, 16, 24, 0, time.UTC), Updated: time.Date(2026, 11, 20, 9, 29, 21, 0, time.UTC), Event: "push"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("runs = %+v, want %+v", got, want)
@@ -44,7 +44,7 @@ func TestRunListDecodesRecordedOutput(t *testing.T) {
 }
 
 func TestRunListPassesCommitAndFields(t *testing.T) {
-	want := []string{"run", "list", "--commit", sha, "--limit", "100", "--json", "databaseId,workflowName,status,conclusion,url,createdAt"}
+	want := []string{"run", "list", "--commit", sha, "--limit", "100", "--json", headFields}
 	r := gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
 		if name != "gh" || !reflect.DeepEqual(args, want) {
 			t.Errorf("exec %s %q, want gh %q", name, args, want)
@@ -328,5 +328,64 @@ func TestMarkNetworkIgnoresMarkersInURLs(t *testing.T) {
 				t.Errorf("err = %v, want it unmarked: the marker is only in a URL", got)
 			}
 		})
+	}
+}
+
+const headFields = "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event"
+
+func TestRunListDecodesHeadBranchAndSHA(t *testing.T) {
+	var args []string
+	r := gh.Runner{Exec: func(_ context.Context, _ string, a ...string) ([]byte, error) {
+		args = a
+		return fixture(t, "run-list-superseded.json"), nil
+	}}
+	got, err := r.RunList(t.Context(), sha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"run", "list", "--commit", sha, "--limit", "100", "--json", headFields}; !reflect.DeepEqual(args, want) {
+		t.Errorf("gh args = %q, want %q", args, want)
+	}
+	const head = "8da71a01bb18eedaa5b282a4da705350f2dd3f90"
+	created := time.Date(2026, 11, 13, 3, 47, 33, 0, time.UTC)
+	docsUpdated := time.Date(2026, 11, 13, 3, 49, 18, 0, time.UTC)
+	ciUpdated := time.Date(2026, 11, 13, 3, 53, 18, 0, time.UTC)
+	want := []gh.Run{
+		{ID: 43361281019, WorkflowID: 409041454, Workflow: "Docs", Status: "completed", Conclusion: "success", URL: "https://github.com/devvmhq/devvm/actions/runs/43361281019", Created: created, Updated: docsUpdated, HeadBranch: "main", HeadSHA: head, Event: "push"},
+		{ID: 43361281082, WorkflowID: 409041453, Workflow: "CI", Status: "completed", Conclusion: "cancelled", URL: "https://github.com/devvmhq/devvm/actions/runs/43361281082", Created: created, Updated: ciUpdated, HeadBranch: "main", HeadSHA: head, Event: "push"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("runs = %+v, want %+v", got, want)
+	}
+}
+
+func TestBranchRunsArgs(t *testing.T) {
+	from := time.Date(2026, 11, 13, 3, 47, 33, 0, time.UTC)
+	to := from.Add(6*time.Minute + 45*time.Second)
+	want := []string{"run", "list", "--branch", "main", "--workflow", "409041453", "--created", "2026-11-13T03:47:33Z..2026-11-13T03:54:18Z", "--event", "push", "--limit", "20", "--json", headFields}
+	r := gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name != "gh" || !reflect.DeepEqual(args, want) {
+			t.Errorf("exec %s %q, want gh %q", name, args, want)
+		}
+		return fixture(t, "run-list-branch-superseded.json"), nil
+	}}
+	got, err := r.BranchRuns(t.Context(), "main", 409041453, "push", from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 20 || got[0].HeadSHA != "90694a414f84ff5d765cdb6c8741e8d3888a2cbb" || got[0].HeadBranch != "main" {
+		t.Errorf("runs = %+v, want the 20 recorded runs, newest 90694a4 on main", got)
+	}
+}
+
+func TestBranchRunsMarksNetworkErrors(t *testing.T) {
+	from := time.Date(2026, 11, 13, 3, 47, 33, 0, time.UTC)
+	to := from.Add(time.Minute)
+	r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
+		return nil, ghFailure(t, "stderr-network-dial.txt")
+	}}
+	_, err := r.BranchRuns(t.Context(), "main", 409041453, "push", from, to)
+	if !errors.Is(err, gh.ErrNetwork) {
+		t.Errorf("err = %v, want one that is ErrNetwork", err)
 	}
 }
