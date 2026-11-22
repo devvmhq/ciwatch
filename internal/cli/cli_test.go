@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/devvmhq/ciwatch/internal/cli"
 	"github.com/devvmhq/ciwatch/internal/gh"
@@ -18,7 +19,7 @@ import (
 
 const sha = "3bb2dccd75a2754b8d45e522b3c26c22bc66a21a"
 
-var ghArgs = []string{"run", "list", "--commit", sha, "--limit", "100", "--json", "databaseId,workflowName,status,conclusion,url"}
+var ghArgs = []string{"run", "list", "--commit", sha, "--limit", "100", "--json", "databaseId,workflowName,status,conclusion,url,createdAt"}
 
 // counts is how many times the fake ran gh run list and gh run view, and for
 // which runs.
@@ -26,6 +27,57 @@ type counts struct {
 	list    int
 	view    int
 	viewIDs []string
+	events  []string // "list" and "view", in the order gh ran them
+	clock   *fakeClock
+}
+
+// testInterval and testGrace are what the fake helpers set on the App.
+const (
+	testInterval = 10 * time.Second
+	testGrace    = 60 * time.Second
+)
+
+// fixtureNow is after the createdAt of every recorded run, so the grace period
+// of a recorded commit is long over.
+var fixtureNow = time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC)
+
+// fakeClock is the clock the tests control. After never waits: it records d,
+// moves the time on by d, runs the hook, and returns a channel that is ready.
+type fakeClock struct {
+	now   time.Time
+	waits []time.Duration
+	hook  func()
+}
+
+func (c *fakeClock) Now() time.Time { return c.now }
+
+func (c *fakeClock) After(d time.Duration) <-chan time.Time {
+	c.waits = append(c.waits, d)
+	c.now = c.now.Add(d)
+	if c.hook != nil {
+		c.hook()
+	}
+	ch := make(chan time.Time, 1)
+	ch <- c.now
+	return ch
+}
+
+func (c *fakeClock) waited() time.Duration {
+	var total time.Duration
+	for _, d := range c.waits {
+		total += d
+	}
+	return total
+}
+
+// withClock returns app with a fake clock at now and the test interval and
+// grace period.
+func withClock(app cli.App, now time.Time) (cli.App, *fakeClock) {
+	c := &fakeClock{now: now}
+	app.Clock = c
+	app.Interval = testInterval
+	app.Grace = testGrace
+	return app, c
 }
 
 // fakeOpts changes what the fake gh prints for gh run view <id> --json jobs.
@@ -33,6 +85,12 @@ type fakeOpts struct {
 	viewFixture map[string]string // run id to a fixture other than run-view-<id>.json
 	viewErr     map[string]error  // run id to the error gh run view fails with
 	onView      func(id string)   // runs before gh run view answers
+
+	listFixtures []string      // gh run list prints these fixtures, one per call, the last repeated
+	listRaw      []string      // like listFixtures, but the output itself
+	listErr      map[int]error // call number (from 1) to the error gh run list fails with
+	now          time.Time     // the fake clock's time, fixtureNow if zero
+	onWait       func()        // runs when the fake clock is waited on
 }
 
 func readFixture(t *testing.T, name string) []byte {
@@ -56,7 +114,21 @@ func fake(t *testing.T, fixture string, ghErr, gitErr error) (cli.App, *counts) 
 func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) (cli.App, *counts) {
 	t.Helper()
 	c := new(counts)
-	return cli.App{GH: gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
+	var lists [][]byte
+	for _, f := range opts.listFixtures {
+		lists = append(lists, readFixture(t, f))
+	}
+	for _, raw := range opts.listRaw {
+		lists = append(lists, []byte(raw))
+	}
+	now := opts.now
+	if now.IsZero() {
+		now = fixtureNow
+	}
+	app := cli.App{GH: gh.Runner{Exec: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == "gh" && ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		switch {
 		case name == "git":
 			if gitErr != nil {
@@ -65,16 +137,24 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 			return []byte(sha + "\n"), nil
 		case name == "gh" && len(args) >= 2 && args[0] == "run" && args[1] == "list":
 			c.list++
+			c.events = append(c.events, "list")
 			if !reflect.DeepEqual(args, ghArgs) {
 				t.Errorf("gh args = %q, want %q", args, ghArgs)
 			}
+			if err := opts.listErr[c.list]; err != nil {
+				return nil, err
+			}
 			if ghErr != nil {
 				return nil, ghErr
+			}
+			if len(lists) > 0 {
+				return lists[min(c.list, len(lists))-1], nil
 			}
 			return readFixture(t, fixture), nil
 		case name == "gh" && len(args) == 5 && args[0] == "run" && args[1] == "view":
 			id := args[2]
 			c.view++
+			c.events = append(c.events, "view")
 			c.viewIDs = append(c.viewIDs, id)
 			if want := []string{"run", "view", id, "--json", "jobs"}; !reflect.DeepEqual(args, want) {
 				t.Errorf("gh args = %q, want %q", args, want)
@@ -93,13 +173,16 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 		}
 		t.Errorf("unexpected command %s %q", name, args)
 		return nil, errors.New("unexpected command")
-	}}}, c
+	}}}
+	app, c.clock = withClock(app, now)
+	c.clock.hook = opts.onWait
+	return app, c
 }
 
 // inline returns an App whose gh run list prints list and whose gh run view
 // prints jobs for every run.
 func inline(list, jobs string) cli.App {
-	return cli.App{GH: gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
+	app, _ := withClock(cli.App{GH: gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
 		if name == "git" {
 			return []byte(sha + "\n"), nil
 		}
@@ -107,7 +190,8 @@ func inline(list, jobs string) cli.App {
 			return []byte(jobs), nil
 		}
 		return []byte(list), nil
-	}}}
+	}}}, fixtureNow)
+	return app
 }
 
 // noJobs is what gh run view prints for a run without jobs.
@@ -128,7 +212,7 @@ func TestRunExitCodes(t *testing.T) {
 		{"success", []string{"HEAD"}, "run-list-success.json", nil, nil, cli.ExitOK, "", true, 3},
 		{"failure", []string{"HEAD"}, "run-list-failure.json", nil, nil, cli.ExitFailed, "", true, 2},
 		{"cancelled", []string{"HEAD"}, "run-list-cancelled.json", nil, nil, cli.ExitCancelled, "", true, 1},
-		{"in progress", []string{"HEAD"}, "run-list-in-progress.json", nil, nil, cli.ExitUnchecked, "in progress", true, 2},
+		{"in progress", []string{"--once", "HEAD"}, "run-list-in-progress.json", nil, nil, cli.ExitUnchecked, "in progress", true, 2},
 		{"empty", []string{"HEAD"}, "run-list-empty.json", nil, nil, cli.ExitUnchecked, "no runs", true, 0},
 		{"gh error", []string{"HEAD"}, "", errors.New("HTTP 401"), nil, cli.ExitUnchecked, "HTTP 401", true, 0},
 		{"bad commit", []string{"nope"}, "", nil, errors.New("fatal: bad revision"), cli.ExitUsage, "ciwatch:", false, 0},
@@ -326,7 +410,7 @@ func TestRunExitCodePrecedence(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			app := inline("["+strings.Join(tt.runs, ",")+"]", noJobs)
 			var stdout, stderr bytes.Buffer
-			if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != tt.want {
+			if code := app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr); code != tt.want {
 				t.Errorf("exit code = %d, want %d", code, tt.want)
 			}
 		})
@@ -334,12 +418,12 @@ func TestRunExitCodePrecedence(t *testing.T) {
 }
 
 func TestRunMalformedGhOutputCouldNotCheck(t *testing.T) {
-	app := cli.App{GH: gh.Runner{Exec: func(_ context.Context, name string, _ ...string) ([]byte, error) {
+	app, _ := withClock(cli.App{GH: gh.Runner{Exec: func(_ context.Context, name string, _ ...string) ([]byte, error) {
 		if name == "git" {
 			return []byte(sha + "\n"), nil
 		}
 		return []byte("oops"), nil
-	}}}
+	}}}, fixtureNow)
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
 		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
@@ -408,7 +492,7 @@ func TestRunFullPageOfRunsMayBeTruncated(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			app := inline(tt.out, noJobs)
 			var stdout, stderr bytes.Buffer
-			if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != tt.want {
+			if code := app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr); code != tt.want {
 				t.Errorf("exit code = %d, want %d (stderr %q)", code, tt.want, stderr.String())
 			}
 			if warned := stderr.Len() > 0; warned != tt.wantWarned {
@@ -447,7 +531,7 @@ func TestRunInProgressPrintsJobs(t *testing.T) {
 		viewFixture: map[string]string{"45017063720": "run-view-45017063720-in-progress.json"},
 	})
 	var stdout, stderr bytes.Buffer
-	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+	if code := app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
 		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
 	}
 	want := []row{runRow("Fuzz", "in_progress", "")}
@@ -583,7 +667,7 @@ func TestRunJSONJobsAreAlwaysArrays(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			tt.app().Run(t.Context(), []string{"HEAD", "--json"}, &stdout, &stderr)
+			tt.app().Run(t.Context(), []string{"--once", "HEAD", "--json"}, &stdout, &stderr)
 			var got struct {
 				Runs []map[string]json.RawMessage `json:"runs"`
 			}
@@ -608,7 +692,7 @@ func TestRunJSONJobsAreAlwaysArrays(t *testing.T) {
 func TestRunCancelledWhileFetchingJobs(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	app := cli.App{GH: gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
+	app, _ := withClock(cli.App{GH: gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
 		switch {
 		case name == "git":
 			return []byte(sha + "\n"), nil
@@ -617,7 +701,7 @@ func TestRunCancelledWhileFetchingJobs(t *testing.T) {
 			return nil, context.Canceled
 		}
 		return readFixture(t, "run-list-failure.json"), nil
-	}}}
+	}}}, fixtureNow)
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(ctx, []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
 		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, stderr.String())
@@ -645,5 +729,243 @@ func TestRunHelpPrintsOnlyUsage(t *testing.T) {
 				t.Errorf("stdout = %q, want nothing", stdout.String())
 			}
 		})
+	}
+}
+
+// Runs as gh run list prints them, with the createdAt of the recorded runs.
+const (
+	fuzzRunning = `{"conclusion":"","createdAt":"2026-11-22T11:23:10Z","databaseId":45017063720,"status":"in_progress","url":"u","workflowName":"Fuzz"}`
+	fuzzDone    = `{"conclusion":"success","createdAt":"2026-11-22T11:23:10Z","databaseId":45017063720,"status":"completed","url":"u","workflowName":"Fuzz"}`
+	ciDone      = `{"conclusion":"success","createdAt":"2026-11-21T21:23:21Z","databaseId":44951283922,"status":"completed","url":"u","workflowName":"CI"}`
+	docsQueued  = `{"conclusion":"","createdAt":"2026-11-21T21:23:21Z","databaseId":44951284032,"status":"queued","url":"u","workflowName":"Docs"}`
+	docsDone    = `{"conclusion":"success","createdAt":"2026-11-21T21:23:21Z","databaseId":44951284032,"status":"completed","url":"u","workflowName":"Docs"}`
+	docsFailed  = `{"conclusion":"failure","createdAt":"2026-11-21T21:23:21Z","databaseId":44951284032,"status":"completed","url":"u","workflowName":"Docs"}`
+)
+
+func list(runs ...string) string { return "[" + strings.Join(runs, ",") + "]" }
+
+func TestWatchPollsUntilAllComplete(t *testing.T) {
+	app, calls := fakeWith(t, "", nil, nil, fakeOpts{
+		listFixtures: []string{"run-list-in-progress.json", "run-list-in-progress.json", "run-list-success.json"},
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	if calls.list != 3 {
+		t.Errorf("gh run list calls = %d, want 3", calls.list)
+	}
+	if want := []time.Duration{testInterval, testInterval}; !reflect.DeepEqual(calls.clock.waits, want) {
+		t.Errorf("waits = %v, want %v", calls.clock.waits, want)
+	}
+	if want := []string{"list", "list", "list", "view", "view", "view"}; !reflect.DeepEqual(calls.events, want) {
+		t.Errorf("gh calls = %q, want the jobs fetched once, after the last list: %q", calls.events, want)
+	}
+	var want []row
+	want = append(want, runRow("Fuzz", "completed", "success"))
+	want = append(want, jobRowsOf(t, "run-view-45017063720.json")...)
+	want = append(want, runRow("CI", "completed", "success"))
+	want = append(want, jobRowsOf(t, "run-view-44951283922.json")...)
+	want = append(want, runRow("Docs", "completed", "success"))
+	want = append(want, jobRowsOf(t, "run-view-44951284032.json")...)
+	checkTable(t, stdout.String(), want)
+}
+
+func TestWatchGraceFindsLateRun(t *testing.T) {
+	// The push, and so the run, was created just now.
+	createdNow := strings.ReplaceAll(ciDone, "2026-11-21T21:23:21Z", fixtureNow.Format(time.RFC3339))
+	app, calls := fakeWith(t, "", nil, nil, fakeOpts{
+		listRaw: []string{
+			list(createdNow),
+			list(createdNow, docsQueued),
+			list(createdNow, docsFailed),
+		},
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	if calls.list < 3 {
+		t.Errorf("gh run list calls = %d, want at least 3: it stopped at the first list, where every run had completed", calls.list)
+	}
+	want := []row{runRow("CI", "completed", "success")}
+	want = append(want, jobRowsOf(t, "run-view-44951283922.json")...)
+	want = append(want, runRow("Docs", "completed", "failure"))
+	want = append(want, jobRowsOf(t, "run-view-44951284032.json")...)
+	checkTable(t, stdout.String(), want)
+}
+
+func TestWatchStopsWhenGraceEnds(t *testing.T) {
+	createdNow := strings.ReplaceAll(ciDone, "2026-11-21T21:23:21Z", fixtureNow.Format(time.RFC3339))
+	app, calls := fakeWith(t, "", nil, nil, fakeOpts{listRaw: []string{list(createdNow)}})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	if want := int(testGrace/testInterval) + 1; calls.list != want {
+		t.Errorf("gh run list calls = %d, want %d", calls.list, want)
+	}
+}
+
+func TestWatchOldCommitDoesNotWait(t *testing.T) {
+	app, calls := fake(t, "run-list-success.json", nil, nil)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	if calls.list != 1 || len(calls.clock.waits) != 0 {
+		t.Errorf("gh run list calls = %d and waits = %v, want 1 and none", calls.list, calls.clock.waits)
+	}
+}
+
+func TestWatchNoRunsAfterGrace(t *testing.T) {
+	app, calls := fake(t, "run-list-empty.json", nil, nil)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
+	}
+	if !strings.Contains(stderr.String(), "no runs found") {
+		t.Errorf("stderr = %q, want it to say no runs were found", stderr.String())
+	}
+	if got := calls.clock.waited(); got < testGrace {
+		t.Errorf("waited %v, want at least the grace period %v", got, testGrace)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing", stdout.String())
+	}
+}
+
+// progressSequence is three polls with Fuzz running, then Docs queued late,
+// then everything done.
+func progressSequence() fakeOpts {
+	return fakeOpts{listRaw: []string{
+		list(fuzzRunning, ciDone),
+		list(fuzzRunning, ciDone),
+		list(fuzzRunning, ciDone),
+		list(fuzzRunning, ciDone, docsQueued),
+		list(fuzzDone, ciDone, docsDone),
+	}}
+}
+
+func TestWatchProgressOnlyOnChange(t *testing.T) {
+	app, _ := fakeWith(t, "", nil, nil, progressSequence())
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	want := "ciwatch: run 45017063720 (Fuzz): in_progress\n" +
+		"ciwatch: run 44951283922 (CI): completed success\n" +
+		"ciwatch: run 44951284032 (Docs): queued\n" +
+		"ciwatch: run 45017063720 (Fuzz): completed success\n" +
+		"ciwatch: run 44951284032 (Docs): completed success\n"
+	if stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	}
+}
+
+func TestWatchJSONIsOneDocument(t *testing.T) {
+	app, _ := fakeWith(t, "", nil, nil, progressSequence())
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"--json", "HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	dec := json.NewDecoder(&stdout)
+	var doc struct {
+		Runs []json.RawMessage `json:"runs"`
+	}
+	if err := dec.Decode(&doc); err != nil {
+		t.Fatalf("stdout is not JSON: %v", err)
+	}
+	if len(doc.Runs) != 3 {
+		t.Errorf("document has %d runs, want 3", len(doc.Runs))
+	}
+	if dec.More() {
+		t.Error("stdout has more than one JSON document")
+	}
+	if !strings.Contains(stderr.String(), "ciwatch: run 44951284032 (Docs): queued") {
+		t.Errorf("stderr = %q, want the progress lines", stderr.String())
+	}
+}
+
+func TestWatchCancelledWhileWaiting(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	app, calls := fakeWith(t, "run-list-in-progress.json", nil, nil, fakeOpts{onWait: cancel})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(ctx, []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "context canceled") {
+		t.Errorf("stderr = %q, want the cancellation", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing", stdout.String())
+	}
+	if calls.view != 0 {
+		t.Errorf("gh run view calls = %d, want 0", calls.view)
+	}
+}
+
+func TestWatchListErrorMidWatch(t *testing.T) {
+	app, _ := fakeWith(t, "run-list-in-progress.json", nil, nil, fakeOpts{
+		listErr: map[int]error{2: errors.New("HTTP 502")},
+	})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
+	}
+	if !strings.Contains(stderr.String(), "HTTP 502") {
+		t.Errorf("stderr = %q, want HTTP 502", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing", stdout.String())
+	}
+}
+
+func TestOnceDoesNotWait(t *testing.T) {
+	app, calls := fake(t, "run-list-in-progress.json", nil, nil)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
+	}
+	if calls.list != 1 || len(calls.clock.waits) != 0 {
+		t.Errorf("gh run list calls = %d and waits = %v, want 1 and none", calls.list, calls.clock.waits)
+	}
+	if want := "ciwatch: 1 runs still in progress; drop --once to wait for them"; !strings.Contains(stderr.String(), want) {
+		t.Errorf("stderr = %q, want it to contain %q", stderr.String(), want)
+	}
+}
+
+func TestWatchRunsWithoutTimesCountGraceFromStart(t *testing.T) {
+	noTime := `{"conclusion":"success","databaseId":44951283922,"status":"completed","url":"u","workflowName":"CI"}`
+	app, calls := fakeWith(t, "", nil, nil, fakeOpts{listRaw: []string{list(noTime)}})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	if want := int(testGrace/testInterval) + 1; calls.list != want {
+		t.Errorf("gh run list calls = %d, want %d", calls.list, want)
+	}
+}
+
+func TestOnceWithNoRunsDoesNotWait(t *testing.T) {
+	app, calls := fake(t, "run-list-empty.json", nil, nil)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
+	}
+	if calls.list != 1 || len(calls.clock.waits) != 0 || !strings.Contains(stderr.String(), "no runs found") {
+		t.Errorf("gh run list calls = %d, waits = %v, stderr = %q, want 1, none and no runs found", calls.list, calls.clock.waits, stderr.String())
+	}
+}
+
+func TestWatchFirstListErrorExits(t *testing.T) {
+	app, calls := fakeWith(t, "run-list-success.json", nil, nil, fakeOpts{listErr: map[int]error{1: errors.New("HTTP 401")}})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d", code, cli.ExitUnchecked)
+	}
+	if !strings.Contains(stderr.String(), "HTTP 401") || calls.list != 1 || stdout.Len() != 0 {
+		t.Errorf("stderr = %q, list calls = %d, stdout = %q", stderr.String(), calls.list, stdout.String())
 	}
 }
