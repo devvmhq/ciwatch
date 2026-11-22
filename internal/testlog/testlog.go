@@ -25,7 +25,8 @@ type Summary struct{ Tests, Skipped, Failures, Errors int }
 // Result is what Parse found in a log.
 type Result struct {
 	Failures []Failure // in log order
-	Summary  *Summary  // nil when there's no DONE line
+	Summary  *Summary  // the totals of every DONE line, since a job can run gotestsum more than once; nil when there's none
+	Runs     []Summary // each DONE line, in log order
 }
 
 var (
@@ -41,12 +42,15 @@ var (
 	// markerRE matches the lines that start or end a block without being part
 	// of a failure's lines. A bare "--- " or "=== " is not one: a diff printed
 	// by a test starts its lines with "--- Expected".
-	markerRE  = regexp.MustCompile(`^(?:\s*--- (?:FAIL|PASS|SKIP): |\s*=== (?:RUN|PAUSE|CONT|NAME|FAIL|PASS|SKIP|Failed|Errors|Skipped)\b|##\[|DONE \d|exit status \d+$|ok  ?\t|FAIL\t|PASS$|FAIL$)`)
+	markerRE  = regexp.MustCompile(`^(?:\s*--- (?:FAIL|PASS|SKIP): |\s*=== (?:RUN|PAUSE|CONT|NAME|FAIL|PASS|SKIP|Failed|Errors|Skipped)\b|##\[|DONE \d|exit status \d+$|ok  ?\t|\?   \t|FAIL\t|PASS$|FAIL$)`)
 	exitRE    = regexp.MustCompile(`^exit status \d+$`)
 	timeoutRE = regexp.MustCompile(`^panic: test timed out after `)
-	runningRE = regexp.MustCompile(`^\s+(\S+) \([^)]*\)$`)
-	pkgFailRE = regexp.MustCompile(`^FAIL\t(\S+)`)
-	doneRE    = regexp.MustCompile(`^DONE (?:\d+ runs?, )?(\d+) tests?(?:, (\d+) skipped)?(?:, (\d+) failures?)?(?:, (\d+) errors?)? in `)
+	// subResultRE matches a subtest's indented result line, which inside
+	// gotestsum's block for a test is part of that test's lines.
+	subResultRE = regexp.MustCompile(`^\s+--- (?:FAIL|PASS|SKIP): `)
+	runningRE   = regexp.MustCompile(`^\s+(\S+) \([^)]*\)$`)
+	pkgFailRE   = regexp.MustCompile(`^FAIL\t(\S+)`)
+	doneRE      = regexp.MustCompile(`^DONE (?:\d+ runs?, )?(\d+) tests?(?:, (\d+) skipped)?(?:, (\d+) failures?)?(?:, (\d+) errors?)? in `)
 )
 
 // stripPrefix removes the gh job and step, the Actions timestamp and ANSI
@@ -66,18 +70,23 @@ type found struct {
 // Parse reads a log and returns its failing tests and gotestsum summary.
 func Parse(r io.Reader) (Result, error) {
 	var (
-		res      Result
-		all      []found
-		cur      = -1  // index in all of the open failure
-		panicked bool  // the open failure has hit a panic, which spans blank lines
-		pending  []int // failures waiting for a "FAIL<TAB>pkg" line
-		out      string
-		timeout  []string // lines of a "test timed out" panic being read; nil when none
-		timing   bool
-		running  bool                    // inside the timeout's "running tests:" list
-		names    []string                // the tests that list names
-		output   = map[string][]string{} // go test -v output of the test named in out, and of tests before it
-		br       = bufio.NewReader(r)
+		res       Result
+		all       []found
+		cur       = -1  // index in all of the open failure
+		panicked  bool  // the open failure has hit a panic, which spans blank lines
+		pending   []int // failures waiting for a "FAIL<TAB>pkg" line
+		out       string
+		summaries []Summary // every DONE line, in log order
+		stray     []string  // lines outside any test since the last marker, where a crash with no "--- FAIL:" line lands
+		crashed   bool      // a crash has been seen since the last "FAIL<TAB>pkg" line
+		ran       bool      // a test has started or finished since the last "FAIL<TAB>pkg", "ok" or step line, so a bare "FAIL" is testing's own and not the run's closing one
+		ended     bool      // testing's own "FAIL" or "PASS" line has been seen since the last "FAIL<TAB>pkg" line: the run finished, so what follows is not a crash
+		timeout   []string  // lines of a "test timed out" panic being read; nil when none
+		timing    bool
+		running   bool                    // inside the timeout's "running tests:" list
+		names     []string                // the tests that list names
+		output    = map[string][]string{} // go test -v output of the test named in out, and of tests before it
+		br        = bufio.NewReader(r)
 	)
 	// endTimeout turns a finished "test timed out" panic into one failure per
 	// running test. go test prints no "--- FAIL:" line for them.
@@ -96,6 +105,23 @@ func Parse(r io.Reader) (Result, error) {
 		}
 		timing, running, timeout, names = false, false, nil, nil
 	}
+	// takeOut turns a -v test that never finished into crash lines: the package
+	// ended while the test was still running.
+	takeOut := func() {
+		if out != "" {
+			stray = append(stray, output[out]...)
+			delete(output, out)
+			out = ""
+		}
+	}
+	hasText := func(lines []string) bool {
+		for _, l := range lines {
+			if strings.TrimSpace(l) != "" {
+				return true
+			}
+		}
+		return false
+	}
 	handle := func(line string) {
 		line = stripPrefix(line)
 		// Inside gotestsum's block for a test, the timeout panic is part of
@@ -103,7 +129,7 @@ func Parse(r io.Reader) (Result, error) {
 		inBlock := cur >= 0 && !all[cur].goTest
 		if !inBlock && timeoutRE.MatchString(line) {
 			endTimeout()
-			timing, cur, out = true, -1, ""
+			timing, cur, out, stray = true, -1, "", nil
 			timeout = []string{line}
 			return
 		}
@@ -119,7 +145,12 @@ func Parse(r io.Reader) (Result, error) {
 			return
 		}
 		endTimeout()
+		if inBlock && subResultRE.MatchString(line) {
+			all[cur].Lines = append(all[cur].Lines, line)
+			return
+		}
 		if m := gotestsumF.FindStringSubmatch(line); m != nil {
+			stray = nil
 			name := m[2]
 			if name == "" {
 				name = "(package)" // gotestsum's line for a failure of the package itself
@@ -129,6 +160,8 @@ func Parse(r io.Reader) (Result, error) {
 			return
 		}
 		if m := goTestF.FindStringSubmatch(line); m != nil {
+			stray = nil
+			ran = true
 			f := Failure{Name: m[1], Lines: output[m[1]]}
 			delete(output, m[1])
 			all = append(all, found{Failure: f, goTest: true})
@@ -140,34 +173,78 @@ func Parse(r io.Reader) (Result, error) {
 			for _, i := range pending {
 				all[i].Package = m[1]
 			}
-			pending, cur, out = nil, -1, ""
+			// A package that failed with no "--- FAIL:" line of its own, or whose
+			// output has a crash after its failures, crashed; the lines before
+			// this one say how.
+			takeOut()
+			if crashed || len(pending) == 0 || !ended {
+				for len(stray) > 0 && strings.TrimSpace(stray[0]) == "" {
+					stray = stray[1:]
+				}
+				if len(stray) > 0 {
+					all = append(all, found{Failure: Failure{Package: m[1], Name: "(package)", Lines: stray}, goTest: true})
+				}
+			}
+			pending, cur, out, stray, crashed, ended, ran = nil, -1, "", nil, false, false, false
 			return
 		}
 		if m := doneRE.FindStringSubmatch(line); m != nil {
-			cur, out = -1, ""
+			cur, out, stray = -1, "", nil
 			if s, ok := summaryOf(m[1:]); ok {
-				res.Summary = &s
+				summaries = append(summaries, s)
 			}
 			return
 		}
 		if m := runRE.FindStringSubmatch(line); m != nil {
-			cur, out = -1, m[1]
+			cur, out, stray, ran = -1, m[1], nil, true
 			return
 		}
 		if m := goTestDone.FindStringSubmatch(line); m != nil {
 			delete(output, m[1])
-			cur, out = -1, ""
+			cur, out, stray, ran = -1, "", nil, true
 			return
 		}
 		if markerRE.MatchString(line) {
-			cur, out = -1, ""
+			cur = -1
+			// "exit status" ends a crash's lines; the "FAIL<TAB>pkg" line after it
+			// is what collects them.
+			if exitRE.MatchString(line) {
+				takeOut()
+				crashed = crashed || (!ended && hasText(stray))
+			} else {
+				if strings.HasPrefix(line, "ok") || strings.HasPrefix(line, "?") || strings.HasPrefix(line, "##[") {
+					// A package that passed, or a new step, starts the next
+					// package's run afresh.
+					ended, crashed, ran = false, false, false
+				} else {
+					// The bare "FAIL" that closes a multi-package run comes after
+					// the last package's line and must not mark the next run ended.
+					ended = ended || (ran && (line == "FAIL" || line == "PASS"))
+				}
+				out, stray = "", nil
+			}
 			return
 		}
 		if out != "" {
 			output[out] = append(output[out], line)
 			return
 		}
+		// testing re-panics a test's own panic as "[recovered"; one without it
+		// comes from a goroutine the test started and crashes the package, not
+		// the test that was open.
+		if cur >= 0 && all[cur].goTest && strings.HasPrefix(line, "panic: ") && !strings.Contains(line, "[recovered") {
+			cur, panicked, crashed = -1, false, true
+			stray = []string{line}
+			return
+		}
+		// After "--- FAIL:" go test prints only the test's own output, which is
+		// indented. An unindented line that isn't a panic (log.Fatal, os.Exit's
+		// message) comes from the package dying, not from the test.
+		if cur >= 0 && all[cur].goTest && !panicked && !strings.HasPrefix(all[cur].Name, "Example") && line != "" && line[0] != ' ' && line[0] != '\t' && !strings.HasPrefix(line, "panic: ") {
+			cur = -1
+		}
 		if cur < 0 {
+			stray = append(stray, line)
 			return
 		}
 		if line == "" {
@@ -195,6 +272,8 @@ func Parse(r io.Reader) (Result, error) {
 	}
 	endTimeout()
 	res.Failures = dedupe(all)
+	res.Summary = total(summaries)
+	res.Runs = summaries
 	return res, nil
 }
 
@@ -215,20 +294,33 @@ func summaryOf(counts []string) (Summary, bool) {
 	return Summary{Tests: n[0], Skipped: n[1], Failures: n[2], Errors: n[3]}, true
 }
 
+// total adds up the summaries; nil when there are none.
+func total(all []Summary) *Summary {
+	if len(all) == 0 {
+		return nil
+	}
+	var t Summary
+	for _, s := range all {
+		t.Tests += s.Tests
+		t.Skipped += s.Skipped
+		t.Failures += s.Failures
+		t.Errors += s.Errors
+	}
+	return &t
+}
+
 // dedupe keeps the first entry for each package and name, with the version
 // that has the most lines, and drops the blank lines a panic leaves at the end.
-// When gotestsum reported failures, go test's own "--- FAIL:" entries are
-// dropped: they repeat gotestsum's, under the full import path where gotestsum
-// prints the path relative to the module.
+// A go test "--- FAIL:" entry that repeats a gotestsum one is dropped: it has
+// the same name under the full import path, where gotestsum prints the path
+// relative to the module (a plain step in another module with a path ending the
+// same way is taken for a repeat). Plain entries gotestsum didn't report, such as those
+// of a separate go test step, are kept.
 func dedupe(all []found) []Failure {
-	gotestsum := false
-	for _, f := range all {
-		gotestsum = gotestsum || !f.goTest
-	}
 	var out []Failure
 	at := map[[2]string]int{}
 	for _, e := range all {
-		if gotestsum && e.goTest {
+		if e.goTest && repeatsGotestsum(all, e) {
 			continue
 		}
 		f := e.Failure
@@ -245,4 +337,23 @@ func dedupe(all []found) []Failure {
 		}
 	}
 	return out
+}
+
+// repeatsGotestsum reports whether a gotestsum entry in all is the same failure
+// as the go test entry e.
+// An entry with no package matches only when a single gotestsum package has
+// that test name (counted by package, as gotestsum may print a block twice); otherwise it can't be told apart and is kept.
+func repeatsGotestsum(all []found, e found) bool {
+	same := map[string]bool{}
+	for _, g := range all {
+		if g.goTest || g.Name != e.Name {
+			continue
+		}
+		if e.Package == "" {
+			same[g.Package] = true
+		} else if e.Package == g.Package || strings.HasSuffix(e.Package, "/"+g.Package) {
+			return true
+		}
+	}
+	return len(same) == 1
 }

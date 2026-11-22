@@ -294,6 +294,7 @@ func TestParseStripsPrefixes(t *testing.T) {
 	want := testlog.Result{
 		Failures: []testlog.Failure{{Package: "internal/vm", Name: "TestA", Lines: []string{"    a_test.go:1: boom"}}},
 		Summary:  &testlog.Summary{Tests: 5, Skipped: 1, Failures: 1},
+		Runs:     []testlog.Summary{{Tests: 5, Skipped: 1, Failures: 1}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -479,7 +480,7 @@ func TestParseTimeoutAtEOF(t *testing.T) {
 }
 
 func TestParsePanicExitStatus(t *testing.T) {
-	got := parse(t, "--- FAIL: TestBoom (0s)\npanic: x\n\ngoroutine 1 [running]:\nexit status 2\nFAIL\tp\t0.1s\n").Failures
+	got := parse(t, "--- FAIL: TestBoom (0s)\npanic: x [recovered]\n\ngoroutine 1 [running]:\nexit status 2\nFAIL\tp\t0.1s\n").Failures
 	if len(got) != 1 || len(got[0].Lines) == 0 || got[0].Lines[len(got[0].Lines)-1] != "goroutine 1 [running]:" {
 		t.Errorf("Failures = %#v", got)
 	}
@@ -517,6 +518,240 @@ func TestParsePackageLevelFailure(t *testing.T) {
 	log := "=== FAIL: internal/vm  (0.00s)\npanic: init failed\n\ngoroutine 1 [running]:\n\nDONE 0 tests, 1 failure in 1s\n"
 	got := parse(t, log).Failures
 	want := []testlog.Failure{{Package: "internal/vm", Name: "(package)", Lines: []string{"panic: init failed", "", "goroutine 1 [running]:"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Failures = %#v, want %#v", got, want)
+	}
+}
+
+func TestParseIndentedFailInsideGotestsumBlock(t *testing.T) {
+	log := "=== FAIL: p TestA (0.00s)\n" +
+		"    a_test.go:1: x\n" +
+		"    --- FAIL: TestA/sub (0.00s)\n" +
+		"        a_test.go:2: y\n" +
+		"panic: boom\n" +
+		"\n" +
+		"goroutine 1 [running]:\n" +
+		"\n" +
+		"DONE 2 tests, 1 failure in 1s\n"
+	got := parse(t, log).Failures
+	want := []testlog.Failure{{Package: "p", Name: "TestA", Lines: []string{
+		"    a_test.go:1: x",
+		"    --- FAIL: TestA/sub (0.00s)",
+		"        a_test.go:2: y",
+		"panic: boom",
+		"",
+		"goroutine 1 [running]:",
+	}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Failures = %#v, want %#v", got, want)
+	}
+}
+
+func TestParseCrashWithoutFailLine(t *testing.T) {
+	log := "--- FAIL: TestX (0.00s)\n" +
+		"    x_test.go:1: bad\n" +
+		"FAIL\n" +
+		"FAIL\tq\t0.1s\n" +
+		"panic: boom\n" +
+		"goroutine 7 [running]:\n" +
+		"main.go:1\n" +
+		"exit status 2\n" +
+		"FAIL\tp\t0.1s\n"
+	got := parse(t, log).Failures
+	want := []testlog.Failure{
+		{Package: "q", Name: "TestX", Lines: []string{"    x_test.go:1: bad"}},
+		{Package: "p", Name: "(package)", Lines: []string{"panic: boom", "goroutine 7 [running]:", "main.go:1"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Failures = %#v, want %#v", got, want)
+	}
+}
+
+func TestParseTwoGotestsumRuns(t *testing.T) {
+	got := parse(t, fixture(t, "gotestsum-two-runs.log")).Summary
+	// 4211 tests and 55 skipped from the unit run, 30 tests from the e2e run.
+	if want := (testlog.Summary{Tests: 4241, Skipped: 55}); got == nil || *got != want {
+		t.Errorf("Summary = %v, want %+v", got, want)
+	}
+	runs := parse(t, fixture(t, "gotestsum-two-runs.log")).Runs
+	if want := []testlog.Summary{{Tests: 4211, Skipped: 55}, {Tests: 30}}; !reflect.DeepEqual(runs, want) {
+		t.Errorf("Runs = %+v, want %+v", runs, want)
+	}
+}
+
+func TestParseKeepsPlainFailuresBesideGotestsum(t *testing.T) {
+	log := "=== FAIL: p TestA (0.00s)\n" +
+		"    a_test.go:1: x\n" +
+		"\n" +
+		"DONE 1 tests, 1 failure in 1s\n" +
+		"--- FAIL: TestB (0.00s)\n" +
+		"    b_test.go:1: y\n" +
+		"FAIL\n" +
+		"FAIL\tq\t0.1s\n"
+	got := parse(t, log).Failures
+	want := []testlog.Failure{
+		{Package: "p", Name: "TestA", Lines: []string{"    a_test.go:1: x"}},
+		{Package: "q", Name: "TestB", Lines: []string{"    b_test.go:1: y"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Failures = %#v, want %#v", got, want)
+	}
+}
+
+func TestParseIndentedPassInsideGotestsumBlock(t *testing.T) {
+	log := "=== FAIL: p TestA (0.00s)\n" +
+		"    --- PASS: TestA/ok (0.00s)\n" +
+		"    a_test.go:1: x\n" +
+		"\n" +
+		"DONE 2 tests, 1 failure in 1s\n"
+	got := parse(t, log).Failures
+	want := []testlog.Failure{{Package: "p", Name: "TestA", Lines: []string{"    --- PASS: TestA/ok (0.00s)", "    a_test.go:1: x"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Failures = %#v, want %#v", got, want)
+	}
+}
+
+func TestParseDropsPlainRepeatOfGotestsumFailure(t *testing.T) {
+	log := "=== FAIL: internal/vm TestA (0.00s)\n" +
+		"    a_test.go:1: x\n" +
+		"\n" +
+		"DONE 1 tests, 1 failure in 1s\n" +
+		"--- FAIL: TestA (0.00s)\n" +
+		"    a_test.go:1: x\n" +
+		"FAIL\n" +
+		"FAIL\texample.com/m/internal/vm\t0.1s\n"
+	got := parse(t, log).Failures
+	want := []testlog.Failure{{Package: "internal/vm", Name: "TestA", Lines: []string{"    a_test.go:1: x"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Failures = %#v, want %#v", got, want)
+	}
+}
+
+func TestParseCrashes(t *testing.T) {
+	crash := []string{"panic: boom", "", "goroutine 7 [running]:", "main.go:1"}
+	passed := "=== RUN   TestOK\n--- PASS: TestOK (0.00s)\nPASS\nok  \ta\t0.1s\n"
+	for _, c := range []struct {
+		name string
+		log  string
+		want []testlog.Failure
+	}{
+		{
+			"verbose, no failing test", "=== RUN   TestX\n" + strings.Join(crash, "\n") + "\nexit status 2\nFAIL\tp\t0.1s\n",
+			[]testlog.Failure{{Package: "p", Name: "(package)", Lines: crash}},
+		},
+		{
+			"after a failing test of the package", "--- FAIL: TestA (0.00s)\n    a_test.go:1: x\n" + strings.Join(crash, "\n") + "\nexit status 2\nFAIL\tp\t0.1s\n",
+			[]testlog.Failure{
+				{Package: "p", Name: "TestA", Lines: []string{"    a_test.go:1: x"}},
+				{Package: "p", Name: "(package)", Lines: crash},
+			},
+		},
+		{
+			"verbose, after a failing test of the package", "=== RUN   TestA\n    a_test.go:1: x\n--- FAIL: TestA (0.00s)\n=== RUN   TestB\n" + strings.Join(crash, "\n") + "\nexit status 2\nFAIL\tp\t0.1s\n",
+			[]testlog.Failure{
+				{Package: "p", Name: "TestA", Lines: []string{"    a_test.go:1: x"}},
+				{Package: "p", Name: "(package)", Lines: crash},
+			},
+		},
+		{
+			"log.Fatal after a failing test, package list", "--- FAIL: TestA (0.00s)\n    a_test.go:1: x\n2026/11/22 10:00:00 db gone\nFAIL\tp\t0.1s\n",
+			[]testlog.Failure{
+				{Package: "p", Name: "TestA", Lines: []string{"    a_test.go:1: x"}},
+				{Package: "p", Name: "(package)", Lines: []string{"2026/11/22 10:00:00 db gone"}},
+			},
+		},
+		{
+			"log.Fatal after a failing test, exit status", "--- FAIL: TestA (0.00s)\n    a_test.go:1: x\n2026/11/22 10:00:00 db gone\nexit status 1\nFAIL\tp\t0.1s\n",
+			[]testlog.Failure{
+				{Package: "p", Name: "TestA", Lines: []string{"    a_test.go:1: x"}},
+				{Package: "p", Name: "(package)", Lines: []string{"2026/11/22 10:00:00 db gone"}},
+			},
+		},
+		{
+			"TestMain output after the end of a normal run", "--- FAIL: TestA (0.00s)\n    a_test.go:1: x\nFAIL\ncleanup done\nexit status 1\nFAIL\tp\t0.1s\n",
+			[]testlog.Failure{{Package: "p", Name: "TestA", Lines: []string{"    a_test.go:1: x"}}},
+		},
+		{
+			"log noise before a timeout", "2026/11/22 10:00:00 setup\npanic: test timed out after 1s\n\trunning tests:\n\t\tTestSlow (1s)\n\nexit status 2\nFAIL\tp\t1s\n",
+			[]testlog.Failure{{Package: "p", Name: "TestSlow", Lines: []string{"panic: test timed out after 1s", "\trunning tests:", "\t\tTestSlow (1s)"}}},
+		},
+		{
+			"verbose, after a passing package, panic after a failing test", passed + "=== RUN   TestA\n    a_test.go:1: x\n--- FAIL: TestA (0.00s)\n=== RUN   TestB\n" + strings.Join(crash, "\n") + "\nexit status 2\nFAIL\tp\t0.1s\n",
+			[]testlog.Failure{
+				{Package: "p", Name: "TestA", Lines: []string{"    a_test.go:1: x"}},
+				{Package: "p", Name: "(package)", Lines: crash},
+			},
+		},
+		{
+			"after a passing package, log.Fatal after a failing test", passed + "--- FAIL: TestA (0.00s)\n    a_test.go:1: x\n2026/11/22 10:00:00 db gone\nexit status 1\nFAIL\tp\t0.1s\n",
+			[]testlog.Failure{
+				{Package: "p", Name: "TestA", Lines: []string{"    a_test.go:1: x"}},
+				{Package: "p", Name: "(package)", Lines: []string{"2026/11/22 10:00:00 db gone"}},
+			},
+		},
+		{
+			"after a package with no test files", "?   \tq\t[no test files]\npanic: boom\nexit status 2\nFAIL\tp\t0.1s\n",
+			[]testlog.Failure{{Package: "p", Name: "(package)", Lines: []string{"panic: boom"}}},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := parse(t, c.log).Failures; !reflect.DeepEqual(got, c.want) {
+				t.Errorf("Failures = %#v, want %#v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestParseKeepsPlainFailureOfAmbiguousPackage(t *testing.T) {
+	// Two packages fail TestA under gotestsum, and a plain go test step's
+	// TestA never got its FAIL line, so it can't be said to repeat either.
+	log := "=== FAIL: p TestA (0.00s)\n    a_test.go:1: x\n\n" +
+		"=== FAIL: r TestA (0.00s)\n    a_test.go:1: x\n\n" +
+		"DONE 2 tests, 2 failures in 1s\n" +
+		"--- FAIL: TestA (0.00s)\n    a_test.go:2: y\n"
+	got := parse(t, log).Failures
+	if len(got) != 3 || !reflect.DeepEqual(got[2], testlog.Failure{Name: "TestA", Lines: []string{"    a_test.go:2: y"}}) {
+		t.Errorf("Failures = %#v, want the plain TestA kept as a third", got)
+	}
+}
+
+func TestParseFailingExampleKeepsGotWant(t *testing.T) {
+	lines := []string{"got:", "hello", "want:", "bye"}
+	want := []testlog.Failure{{Package: "p", Name: "ExampleHello", Lines: lines}}
+	for name, log := range map[string]string{
+		"plain":   "--- FAIL: ExampleHello (0.00s)\n" + strings.Join(lines, "\n") + "\nFAIL\nFAIL\tp\t0.1s\n",
+		"verbose": "=== RUN   ExampleHello\n--- FAIL: ExampleHello (0.00s)\n" + strings.Join(lines, "\n") + "\nFAIL\nFAIL\tp\t0.1s\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := parse(t, log).Failures; !reflect.DeepEqual(got, want) {
+				t.Errorf("Failures = %#v, want %#v", got, want)
+			}
+		})
+	}
+}
+
+func TestParseRepeatedGotestsumBlocksDropPlainRepeat(t *testing.T) {
+	log := "=== FAIL: p TestA (0.00s)\n    a_test.go:1: x\n\n" +
+		"=== Failed\n" +
+		"=== FAIL: p TestA (0.00s)\n    a_test.go:1: x\n\n" +
+		"DONE 1 tests, 1 failure in 1s\n" +
+		"--- FAIL: TestA (0.00s)\n    a_test.go:1: x\n"
+	got := parse(t, log).Failures
+	want := []testlog.Failure{{Package: "p", Name: "TestA", Lines: []string{"    a_test.go:1: x"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Failures = %#v, want %#v", got, want)
+	}
+}
+
+func TestParseCrashAfterTrailingFailOfEarlierRun(t *testing.T) {
+	log := "--- FAIL: TestA (0.00s)\n    a_test.go:1: x\nFAIL\nFAIL\tq\t0.1s\nFAIL\n" +
+		"--- FAIL: TestB (0.00s)\n    b_test.go:1: y\n2026/11/22 10:00:00 db gone\nexit status 1\nFAIL\tp\t0.1s\n"
+	got := parse(t, log).Failures
+	want := []testlog.Failure{
+		{Package: "q", Name: "TestA", Lines: []string{"    a_test.go:1: x"}},
+		{Package: "p", Name: "TestB", Lines: []string{"    b_test.go:1: y"}},
+		{Package: "p", Name: "(package)", Lines: []string{"2026/11/22 10:00:00 db gone"}},
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Failures = %#v, want %#v", got, want)
 	}
