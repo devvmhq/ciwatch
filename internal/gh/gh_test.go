@@ -35,8 +35,8 @@ func TestRunListDecodesRecordedOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []gh.Run{
-		{ID: 44729305066, WorkflowID: 409041459, Workflow: "Fuzz", Status: "completed", Conclusion: "failure", URL: "https://github.com/devvmhq/devvm/actions/runs/44729305066", Created: time.Date(2026, 11, 20, 11, 38, 53, 0, time.UTC), Updated: time.Date(2026, 11, 20, 12, 13, 8, 0, time.UTC), Event: "push"},
-		{ID: 44709305564, WorkflowID: 409041453, Workflow: "CI", Status: "completed", Conclusion: "success", URL: "https://github.com/devvmhq/devvm/actions/runs/44709305564", Created: time.Date(2026, 11, 20, 9, 16, 24, 0, time.UTC), Updated: time.Date(2026, 11, 20, 9, 29, 21, 0, time.UTC), Event: "push"},
+		{ID: 44729305066, WorkflowID: 409041459, Workflow: "Fuzz", Status: "completed", Conclusion: "failure", URL: "https://github.com/devvmhq/devvm/actions/runs/44729305066", Created: time.Date(2026, 11, 20, 11, 38, 53, 0, time.UTC), Updated: time.Date(2026, 11, 20, 12, 13, 8, 0, time.UTC), HeadBranch: "main", HeadSHA: "c4b4c0242478a612ca295d5ff223709e84a2d172", Event: "schedule"},
+		{ID: 44709305564, WorkflowID: 409041453, Workflow: "CI", Status: "completed", Conclusion: "success", URL: "https://github.com/devvmhq/devvm/actions/runs/44709305564", Created: time.Date(2026, 11, 20, 9, 16, 24, 0, time.UTC), Updated: time.Date(2026, 11, 20, 9, 29, 21, 0, time.UTC), HeadBranch: "main", HeadSHA: "c4b4c0242478a612ca295d5ff223709e84a2d172", Event: "push"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("runs = %+v, want %+v", got, want)

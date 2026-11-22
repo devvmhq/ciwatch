@@ -95,7 +95,8 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			return ExitUnchecked
 		}
 		var next string
-		newer, next = a.findSuperseded(ctx, runs, opts.follow && len(followed) < MaxFollowed, seen, stderr)
+		var from gh.Run
+		newer, next, from = a.findSuperseded(ctx, runs, opts.follow && len(followed) < MaxFollowed, seen, stderr)
 		if ctx.Err() != nil { // Ctrl-C during the lookup: no table, and no commit to follow
 			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", ctx.Err())
 			return ExitUnchecked
@@ -103,7 +104,15 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		if next == "" {
 			break
 		}
+		if opts.once { // nothing waited for them, so they are dropped, not finished
+			for _, r := range runs {
+				if r.Status != "completed" {
+					_, _ = fmt.Fprintf(stderr, "ciwatch: run %d (%s) of %s is still in progress; not waiting for it, as --once follows a cancelled run at once\n", r.ID, r.Workflow, short(sha))
+				}
+			}
+		}
 		followed = append(followed, sha)
+		_, _ = fmt.Fprintf(stderr, "ciwatch: run %d (%s) was cancelled by a newer push; following %s…\n", from.ID, from.Workflow, short(next))
 		sha = next
 		seen[sha] = true
 	}
@@ -267,9 +276,10 @@ const cancelSlack = time.Minute
 // supersededBy finds the run whose push cancelled the cancelled run: the first
 // run of the same workflow on the same branch that was created after run and
 // no later than when run stopped (a concurrency group cancels a run as the
-// newer one is queued), is for another commit and has the same event (a fork's
-// pull request from a branch of the same name is not a push to this one). A later push that came after
-// the run had already been cancelled, say by hand, is not it. ok is false if
+// newer one is queued), is for another commit and has the same event (so for a
+// cancelled push, a fork's pull request from a branch of the same name is not
+// taken for the push that cancelled it). A later push that came after the run
+// had already been cancelled, say by hand, is not it. ok is false if
 // there is none.
 func (a App) supersededBy(ctx context.Context, run gh.Run, w io.Writer) (by gh.Run, ok bool, err error) {
 	if run.HeadBranch == "" {
@@ -321,13 +331,13 @@ func replaced(run gh.Run, runs []gh.Run) bool {
 
 // findSuperseded looks for a newer push behind each cancelled run, and returns
 // the commit for each run it found by run ID. next is the commit to follow, if
-// follow is set: the newest of those pushes, unless it is a commit in seen. A
-// cancelled run that a later run of the same commit replaced is not looked
-// into. A lookup that fails is a warning,
-// and the run stays plainly cancelled.
-func (a App) findSuperseded(ctx context.Context, runs []gh.Run, follow bool, seen map[string]bool, w io.Writer) (by map[int64]string, next string) {
+// follow is set: the newest of those pushes, unless it is a commit in seen
+// (a line to w says so), and from is the run that push cancelled. A cancelled
+// run that a later run of the same commit replaced is not looked into. A
+// lookup that fails is a warning, and the run stays plainly cancelled.
+func (a App) findSuperseded(ctx context.Context, runs []gh.Run, follow bool, seen map[string]bool, w io.Writer) (by map[int64]string, next string, from gh.Run) {
 	by = map[int64]string{}
-	var from, nextRun gh.Run
+	var nextRun gh.Run
 	lookupApp := a
 	for _, r := range runs {
 		if r.Status != "completed" || r.Conclusion != "cancelled" || replaced(r, runs) {
@@ -336,7 +346,7 @@ func (a App) findSuperseded(ctx context.Context, runs []gh.Run, follow bool, see
 		newer, ok, err := lookupApp.supersededBy(ctx, r, w)
 		if err != nil {
 			if ctx.Err() != nil { // Ctrl-C: no warning per remaining run, and nothing to follow
-				return map[int64]string{}, ""
+				return map[int64]string{}, "", gh.Run{}
 			}
 			_, _ = fmt.Fprintf(w, "ciwatch: can't look for a newer push after run %d (%s): %v\n", r.ID, r.Workflow, err)
 			if errors.Is(err, gh.ErrNetwork) || errors.Is(err, gh.ErrTemporary) {
@@ -349,14 +359,14 @@ func (a App) findSuperseded(ctx context.Context, runs []gh.Run, follow bool, see
 			continue
 		}
 		by[r.ID] = newer.HeadSHA
+		if follow && seen[newer.HeadSHA] {
+			_, _ = fmt.Fprintf(w, "ciwatch: run %d (%s) was cancelled by a newer push, %s, which was already watched; not following it again\n", r.ID, r.Workflow, short(newer.HeadSHA))
+		}
 		if follow && !seen[newer.HeadSHA] && newer.Created.After(nextRun.Created) {
 			from, nextRun, next = r, newer, newer.HeadSHA
 		}
 	}
-	if next != "" {
-		_, _ = fmt.Fprintf(w, "ciwatch: run %d (%s) was cancelled by a newer push; following %s…\n", from.ID, from.Workflow, short(next))
-	}
-	return by, next
+	return by, next, from
 }
 
 // retry calls call, and calls it again after a backoff wait while it fails

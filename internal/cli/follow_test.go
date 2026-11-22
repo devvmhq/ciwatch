@@ -570,3 +570,52 @@ func TestHintIsTheLastLineEvenWithRunsInProgress(t *testing.T) {
 		t.Errorf("stderr = %q, want the in-progress line before the hint", stderr.String())
 	}
 }
+
+func TestFollowOnceNamesRunsInProgressBeforeFollowing(t *testing.T) {
+	// --once --follow moves on from a commit while its Docs run is still going;
+	// that run is dropped, so stderr must name it before the move.
+	const runs = `[
+{"conclusion":"","createdAt":"2026-11-13T03:47:33Z","updatedAt":"2026-11-13T03:49:18Z","databaseId":43361281019,"event":"push","headBranch":"main","headSha":"` + shaCancelled + `","status":"in_progress","url":"u","workflowDatabaseId":409041454,"workflowName":"Docs"},
+{"conclusion":"cancelled","createdAt":"2026-11-13T03:47:33Z","updatedAt":"2026-11-13T03:53:18Z","databaseId":43361281082,"event":"push","headBranch":"main","headSha":"` + shaCancelled + `","status":"completed","url":"u","workflowDatabaseId":409041453,"workflowName":"CI"}
+]`
+	app, _ := site{
+		head: shaCancelled,
+		commits: map[string]string{
+			shaCancelled: runs,
+			shaNewer:     "run-list-newer-success.json",
+		},
+		branch: []string{"run-list-branch-superseded.json"},
+	}.app(t)
+	var stdout, stderr bytes.Buffer
+	app.Run(t.Context(), []string{"--once", "--follow", "HEAD"}, &stdout, &stderr)
+	named, following := -1, -1
+	for i, l := range strings.Split(stderr.String(), "\n") {
+		if strings.Contains(l, "in progress") && strings.Contains(l, "Docs") && named < 0 {
+			named = i
+		}
+		if strings.Contains(l, "following") && following < 0 {
+			following = i
+		}
+	}
+	if named < 0 || following < 0 || named > following {
+		t.Errorf("stderr = %q, want a line naming the Docs run still in progress, before the following line", stderr.String())
+	}
+}
+
+func TestFollowSaysWhenTheNewerCommitWasAlreadyWatched(t *testing.T) {
+	// shaNewer's run names shaCancelled as its successor, which was watched
+	// first; ciwatch doesn't follow back, and must say why.
+	app, _ := site{
+		head: shaCancelled,
+		commits: map[string]string{
+			shaCancelled: "[" + cancelledRun(1, shaCancelled) + "]",
+			shaNewer:     "[" + cancelledRun(2, shaNewer) + "]",
+		},
+		branch: []string{laterRun(shaNewer), laterRun(shaCancelled)},
+	}.app(t)
+	var stdout, stderr bytes.Buffer
+	app.Run(t.Context(), []string{"--follow", "HEAD"}, &stdout, &stderr)
+	if !strings.Contains(stderr.String(), "already watched") {
+		t.Errorf("stderr = %q, want a line saying the newer commit was already watched", stderr.String())
+	}
+}
