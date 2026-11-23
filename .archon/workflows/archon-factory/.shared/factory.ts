@@ -374,8 +374,11 @@ export function designSection(design: string, heading: string): string {
 export function inferenceNote(design: string): string {
   const inference = designSection(design, "Inference");
   if (inference === "") return "Inference: the design has no \"## Inference\" section; read it for timing or format guesses before approving.";
-  // "none", however the design formats it: `none`, **None.**, - none.
+  // "none", however the design formats it (`none`, **None.**, - none), and
+  // "none" followed by a sentence saying why (none. "Present" is decided by …).
   if (/^none$/i.test(inference.replace(/[`*_.\-\s]/g, ""))) return "Inference: none.";
+  const why = /^[-*\s`_]*none[`*_]*\s*[.:;—–-]\s*([\s\S]+)$/i.exec(inference);
+  if (why) return `Inference: none (${why[1].trim().replace(/\s+/g, " ")}).`;
   return `Inference: THIS DESIGN INFERS FROM TIMING OR FORMATS. It needs your own judgement:\n${inference}`;
 }
 

@@ -78,6 +78,11 @@ describe("inferenceNote", () => {
     expect(inferenceNote("## Inference\n\n`none`\n\n## Behaviour\nx")).toBe("Inference: none.");
     expect(inferenceNote("## Inference\n**None.**\n")).toBe("Inference: none.");
     expect(inferenceNote("## Inference\n- none\n")).toBe("Inference: none.");
+    expect(inferenceNote('## Inference\nnone. "Already present" is decided by O_EXCL, not gh\'s text.\n')).toBe(
+      'Inference: none ("Already present" is decided by O_EXCL, not gh\'s text.).',
+    );
+    expect(inferenceNote("## Inference\n`none` — nothing is guessed.\n")).toBe("Inference: none (nothing is guessed.).");
+    expect(inferenceNote("## Inference\nNone of the steps are named, so we cut by timestamps.\n")).toContain("THIS DESIGN INFERS");
     expect(inferenceNote("## Inference\n- Steps are cut by timestamps.\n")).toContain("THIS DESIGN INFERS");
     expect(inferenceNote("## Acceptance cases\nAC-1: x\n")).toContain("has no \"## Inference\" section");
   });
