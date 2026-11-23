@@ -5,13 +5,11 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/devvmhq/ciwatch/internal/gh"
@@ -158,10 +156,11 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		return ExitUnchecked
 	}
 
+	report := buildReport(sha, followed, withJobs)
 	if opts.json {
-		err = writeJSON(stdout, sha, followed, withJobs)
+		err = report.WriteJSON(stdout)
 	} else {
-		err = writeTable(stdout, withJobs, a.MaxTestLines)
+		err = report.WriteTable(stdout, a.MaxTestLines)
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
@@ -542,120 +541,4 @@ func exitCode(runs []gh.Run) (code, pending int) {
 		return ExitUnchecked, pending
 	}
 	return ExitOK, 0
-}
-
-func writeTable(w io.Writer, runs []runWithJobs, maxLines int) error {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "WORKFLOW\tSTATUS\tCONCLUSION")
-	for _, r := range runs {
-		note := ""
-		if r.SupersededBy != "" {
-			note = "  (superseded by " + short(r.SupersededBy) + ")"
-		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s%s\n", r.Workflow, r.Status, r.Conclusion, note)
-		if r.JobsErr != "" {
-			_, _ = fmt.Fprintln(tw, "  (jobs unavailable)\t\t")
-		}
-		for _, j := range r.Jobs {
-			_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\n", j.Name, j.Status, j.Conclusion)
-		}
-	}
-	if err := tw.Flush(); err != nil {
-		return err
-	}
-	// The blocks are free-form, so they follow the flush, not the columns.
-	for _, r := range runs {
-		for _, j := range r.Jobs {
-			if j.Failed {
-				writeFailureBlock(w, r, j, maxLines)
-			}
-		}
-	}
-	return nil
-}
-
-// writeFailureBlock writes the failing tests of the failed job j of r, with at
-// most maxLines lines of each (all of them if maxLines is 0).
-func writeFailureBlock(w io.Writer, r runWithJobs, j jobResult, maxLines int) {
-	_, _ = fmt.Fprintf(w, "\n%s (%s, run %d):\n", j.Name, r.Workflow, r.ID)
-	switch {
-	case j.TestsErr != "":
-		_, _ = fmt.Fprintln(w, "  (failing tests unavailable)")
-	case len(j.Tests) == 0:
-		_, _ = fmt.Fprintln(w, "  (no failing tests found in the log)")
-	}
-	for _, f := range j.Tests {
-		head := "  FAIL"
-		if f.Package != "" {
-			head += " " + f.Package
-		}
-		head += " " + f.Name
-		if f.RunningTest != "" {
-			head += ": crashed while running " + f.RunningTest
-		}
-		_, _ = fmt.Fprintln(w, head)
-		lines := f.Lines
-		if maxLines > 0 && len(lines) > maxLines {
-			lines = lines[:maxLines]
-		}
-		for _, l := range lines {
-			_, _ = fmt.Fprintln(w, "  "+l)
-		}
-		if more := len(f.Lines) - len(lines); more > 0 {
-			_, _ = fmt.Fprintf(w, "  … %d more lines (--json has them all)\n", more)
-		}
-	}
-}
-
-type jsonJob struct {
-	ID         int64  `json:"id"`
-	Name       string `json:"name"`
-	Status     string `json:"status"`
-	Conclusion string `json:"conclusion"`
-	URL        string `json:"url"`
-
-	Tests      *[]jsonTest `json:"tests,omitempty"` // only for a failed job whose log was read
-	TestsError string      `json:"tests_error,omitempty"`
-}
-
-type jsonTest struct {
-	Package     string   `json:"package"`
-	Name        string   `json:"name"`
-	Lines       []string `json:"lines"`
-	RunningTest string   `json:"running_test,omitempty"`
-}
-
-type jsonRun struct {
-	ID         int64     `json:"id"`
-	Workflow   string    `json:"workflow"`
-	Status     string    `json:"status"`
-	Conclusion string    `json:"conclusion"`
-	URL        string    `json:"url"`
-	Jobs       []jsonJob `json:"jobs"`
-	JobsError  string    `json:"jobs_error,omitempty"`
-
-	SupersededBy string `json:"superseded_by,omitempty"`
-}
-
-func writeJSON(w io.Writer, sha string, followed []string, runs []runWithJobs) error {
-	out := struct {
-		SHA          string    `json:"sha"`
-		FollowedFrom []string  `json:"followed_from,omitempty"`
-		Runs         []jsonRun `json:"runs"`
-	}{SHA: sha, FollowedFrom: followed, Runs: make([]jsonRun, len(runs))}
-	for i, r := range runs {
-		jobs := make([]jsonJob, len(r.Jobs))
-		for k, j := range r.Jobs {
-			jobs[k] = jsonJob{ID: j.ID, Name: j.Name, Status: j.Status, Conclusion: j.Conclusion, URL: j.URL, TestsError: j.TestsErr}
-			if j.Failed && j.TestsErr == "" {
-				tests := make([]jsonTest, len(j.Tests))
-				for n, f := range j.Tests {
-					tests[n] = jsonTest{Package: f.Package, Name: f.Name, Lines: append([]string{}, f.Lines...), RunningTest: f.RunningTest}
-				}
-				jobs[k].Tests = &tests
-			}
-		}
-		out.Runs[i] = jsonRun{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr, SupersededBy: r.SupersededBy}
-	}
-	return json.NewEncoder(w).Encode(out)
 }

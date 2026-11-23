@@ -11,6 +11,8 @@ ciwatch watches every GitHub Actions run for a commit until it finishes, and sho
 | `internal/gh/` | the one runner every `gh` and `git` call goes through, and the decoding of its output |
 | `internal/testlog/` | parses failing tests and gotestsum's summary out of a go test log |
 | `testdata/` | recorded `gh` output and CI logs that the tests feed in |
+| `testdata/golden/` | the exact `--json` output for a fixture; changing the output means updating it in the same commit |
+| `docs/` | `json.md`: the `--json` schema and the exit codes; tests hold the encoder to it |
 | `mise.toml`, `.golangci.yml` | pinned tools, tasks and linters |
 | `.archon/` | Archon's settings and the vendored factory pack (`workflows/archon-factory`, from devvmhq/archon-factory), which builds each dex task; never edit the pack here, upgrade it |
 
