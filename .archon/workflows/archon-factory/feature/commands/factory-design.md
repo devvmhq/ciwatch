@@ -11,13 +11,17 @@ $task.output
 
 Read AGENTS.md first, then the code the task touches. You can't edit files, and you shouldn't: this step only produces a design.
 
-Write the design in Markdown, short enough to read in two minutes:
+**Guess at nothing open-ended in the first version.** If the task depends on guessing at input with no fixed format or rules (log formats, push histories, timing, what a human meant), design a first version that needs no guess: one that reports what it can know for certain, or asks the user with a flag. Propose the guessing part as a separate, optional follow-up task under "Follow-up tasks", for the human to accept or not.
+
+Write the design in Markdown, short enough to read in two minutes, with these sections and these exact `##` headings for the second and third:
 
 1. **What changes and why**, in a few sentences, in terms of the task.
-2. **Behaviour**: the commands, flags, output and exit codes a user will see, with one concrete example.
-3. **Code**: the files and functions you'd add or change, and any new dependency (avoid new dependencies unless the task needs one).
-4. **Tests**: the tests to write first, named, each with what it feeds in and what it expects. These must fail before the change and pass after it.
-5. **Out of scope**: what this task deliberately leaves for later.
-6. **Questions**: anything ambiguous in the task, with the answer you'd assume.
+2. `## Acceptance cases`: a numbered list of concrete cases the change must handle, each `AC-<n>:` followed by one input or situation and its exact expected result (output, exit code, file written). Each becomes at least one test. Keep it to the cases that define the task, usually three to eight; they are the spec the reviewer holds the change to.
+3. `## Non-goals`: what this task deliberately doesn't do, including related cases a reviewer might expect. Anything here, or not covered by an acceptance case, is not a defect of this change.
+4. **Behaviour**: the commands, flags, output and exit codes a user will see, with one concrete example.
+5. **Code**: the files and functions you'd add or change, and any new dependency (avoid new dependencies unless the task needs one).
+6. **Tests**: the tests to write first, each naming the acceptance case it covers, with what it feeds in and what it expects. They must fail before the change and pass after it.
+7. **Follow-up tasks** (only if needed): each proposed task's name and a one-paragraph description, ready to become a dex task if the human agrees.
+8. **Questions**: anything ambiguous in the task, with the answer you'd assume.
 
 Reply with the design only.

@@ -6,14 +6,15 @@ An [Archon](https://archon.diy) workflow pack that takes one dex task from desig
 
 **`feature`** builds a feature in a worktree of its own:
 
-1. **Design** (Opus, read-only) from the dex task, then a wait for your approval. Your comment goes to the builder, and a rejection ends the run.
-2. **Tests first** (Sonnet): the tests the design names. A check then fails the run if no test file changed or if the suite already passes.
+1. **Design** (Opus, read-only) from the dex task, with **acceptance cases** (`AC-1`, `AC-2`…: concrete inputs and their expected results) and **non-goals**, then a wait for your approval. Together they are the spec the change is built and reviewed against. A task that depends on guessing at open-ended input gets a first version that guesses at nothing, with the heuristic proposed as a separate, optional follow-up task. Your comment goes to the builder, and a rejection ends the run.
+2. **Tests first** (Sonnet): at least one test per acceptance case. A check then fails the run if no test file changed or if the suite already passes. The tests commit records the approved spec, so every later step, and a `review` run that adopts the branch, reads the same one.
 3. **Implement** and **self-review** (Sonnet), in the same session as the tests.
-4. **Adversarial review** (Opus, read-only), at most 3 rounds. Each round, a fresh reviewer gets the diff and returns `ship` with findings, and a fixer (Sonnet) acts on them when it's `false`. A run that reaches the cap fails for you to judge. Minor findings don't block, so read them at the final review.
-5. **The gate:** `mise run fmt`, `mise run lint` and `mise run test`.
-6. **The merge message** (Sonnet), written from the whole change to the project's AGENTS.md rules, ending with any minor findings the last review left.
-7. **Your review:** the diff's stat, the merge message and the last review, then a wait for your approval.
-8. **Land:** the run's branch is merged into the main checkout's current branch with `git merge --no-ff`, and the dex task is completed with the merge commit. If the merge conflicts, it's aborted and the run says so, so you merge by hand.
+4. **Adversarial review** (Opus, read-only), at most 3 rounds, bounded by the spec. A blocker or major is something that breaks an acceptance case or the spec; anything outside the spec, rarer inputs included, is a **backlog** note for a possible future task and never blocks. Each round, a fresh reviewer gets the diff and the branch's history, and a fixer (Sonnet) fixes its blockers and majors when it doesn't ship. If a round's majors come from the previous round's fix, the loop stops early (**churn**) and asks you: reject to stop and redesign, or approve to carry on with them open. A run that reaches the cap fails for you to judge.
+5. **Polish** (Sonnet): the review's minor findings, fixed inside the run and committed as their own step.
+6. **The gate:** `mise run fmt`, `mise run lint` and `mise run test`.
+7. **The merge message** (Sonnet), written from the whole change to the project's AGENTS.md rules, ending with the minor findings polish left (`Left from review:`) and the review's backlog notes (`Backlog:`).
+8. **Your review:** the diff's stat, the merge message and the last review, then a wait for your approval. A fix task for the leftovers or the backlog happens only if you ask for one.
+9. **Land:** the run's branch is merged into the main checkout's current branch with `git merge --no-ff`, and the dex task is completed with the merge commit. If the merge conflicts, it's aborted and the run says so, so you merge by hand.
 
 Along the way, each stage commits what it changed on the run's branch, with a message its AI step writes to AGENTS.md's rules:
 
@@ -22,20 +23,21 @@ Along the way, each stage commits what it changed on the run's branch, with a me
 | `test(…)`: the failing tests | the red check (this commit fails the tests on purpose) |
 | the implementation | implement |
 | the self-review's fixes | self-review, if it changed anything |
-| `fix(…)`: one per review round | each fixer round, listing every finding and what was done about it, or why it was disputed; committed even when nothing changed |
+| `fix(…)`: one per review round | each fixer round, listing every blocker and major and what was done about it, or why it was disputed; committed even when nothing changed |
+| `fix(…)`: polish | polish, if it changed anything |
 | `style: apply mise run fmt` | the gate, if the formatter changed anything |
 
 The merge commit keeps the main branch's first-parent history passing the gate at every commit, so `git bisect --first-parent` skips the red test commits.
 
-Each round's reviewer also gets the branch's commit messages, so it sees every earlier round's findings and the answers to them. It checks that those are really fixed before looking further, doesn't raise an answered finding again unless the answer is wrong, and rates as major only problems on input the project really sees (what its README, AGENTS.md, the task and its recorded fixtures describe). Possible-but-undescribed input is minor, and left to you.
+Each round's reviewer gets the branch's commit messages, so it sees the spec and every earlier round's findings with the answers to them. It checks that those are really fixed before looking further, and doesn't raise an answered finding again unless the answer is wrong.
 
-**`review`** continues a `feature` or `fix` run whose review hit its cap. It adopts that run's branch in a new run (`archon workflow run --adopt`), so it uses the pack as it is now, and runs up to 3 more review rounds, the gate, your review and the landing merge, like the end of `feature`.
+**`review`** continues a `feature` or `fix` run whose review hit its cap. It adopts that run's branch in a new run (`archon workflow run --adopt`) and runs up to 3 more review rounds, polish, the gate, your review and the landing merge, like the end of `feature`. An adopted run reads project workflows from the adopted branch, whose vendored copy may predate `review`, so `factory review` runs the installed pack's `devvmhq/archon-factory:review`; the pack must be installed with `archon plugin add`.
 
-**`fix`** fixes a bug the same way, without the design step or your approvals. It writes a test that reproduces the bug and checks that it fails, fixes the bug, runs at most 2 review rounds and passes the gate, committing each step, then lands the branch with a merge commit.
+**`fix`** fixes a bug the same way, without the design step: the spec is the task's description of the bug and the test that reproduces it. It writes that test and checks that it fails, fixes the bug, runs at most 2 review rounds (with the same churn stop), polish and the gate, committing each step, then waits for your review like `feature` before landing, so no change reaches the main branch unseen.
 
 ## Lanes
 
-Each run records its task's lane in the project's `.dex/lanes.json`, keyed by the dex task ID, with the run ID and the time. The lanes are `design`, `design-approval`, `build`, `review`, `gate`, `human-review` and `done` for `feature`, and `reproduce`, `build`, `review`, `gate` and `done` for `fix`. A run that fails leaves its task in the lane where it stopped. The lanes live beside dex's own file because dex drops metadata it doesn't know the next time it writes a task.
+Each run records its task's lane in the project's `.dex/lanes.json`, keyed by the dex task ID, with the run ID and the time. The lanes are `design`, `design-approval`, `build`, `review`, `polish`, `gate`, `human-review` and `done` for `feature`, and `reproduce`, `build`, `review`, `polish`, `gate`, `human-review` and `done` for `fix`. A run that fails leaves its task in the lane where it stopped. The lanes live beside dex's own file because dex drops metadata it doesn't know the next time it writes a task.
 
 ## Using it in a project
 

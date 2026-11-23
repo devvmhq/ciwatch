@@ -164,7 +164,7 @@ async function staged(): Promise<boolean> {
 // The stages that commit on the run's branch, each with the message its AI step
 // writes to commit-<stage>.txt in the artifacts folder. gate is the exception:
 // what mise run fmt changed gets a fixed message.
-export const stages = ["tests", "implement", "self-review", "review", "reproduce", "fix", "gate"] as const;
+export const stages = ["tests", "implement", "self-review", "review", "polish", "reproduce", "fix", "gate"] as const;
 
 // Commits what a stage changed on the run's branch, so the branch keeps every
 // step: the failing tests, the implementation, the self-review, each review
@@ -187,6 +187,14 @@ export async function checkpoint(artifacts: string, stage: string): Promise<stri
   } else if (!changed && stage !== "review") {
     await rm(file);
     return `${stage}: nothing to commit`;
+  }
+  // The tests commit records the approved spec (written by the spec step of a
+  // feature run), so the branch carries it to every reviewer.
+  const design = join(artifacts, "design.md");
+  if (stage === "tests" && existsSync(design)) {
+    const approval = join(artifacts, "approval.txt");
+    const spec = extractSpec(await readFile(design, "utf8"), existsSync(approval) ? await readFile(approval, "utf8") : "");
+    await writeFile(file, beforeTrailers(await readFile(file, "utf8"), spec));
   }
   await $`git commit --quiet --allow-empty --file ${file}`.quiet();
   await rm(file); // so a later round can't reuse it
@@ -219,16 +227,38 @@ async function land(a: Args): Promise<void> {
   console.log(sha);
 }
 
-// The message for a task's squashed commit: the merge's message, with the
-// subjects of the stacked commits that built it listed before its trailers.
-export function squashMessage(merge: string, steps: string[]): string {
-  const paragraphs = merge.trim().split(/\n{2,}/);
+// A commit message with a paragraph added at the end of its body, before its
+// trailers (Co-Authored-By and the like), if it has any.
+export function beforeTrailers(message: string, paragraph: string): string {
+  const paragraphs = message.trim().split(/\n{2,}/);
   const last = paragraphs[paragraphs.length - 1] ?? "";
   const trailers = paragraphs.length > 1 && last.split("\n").every((l) => /^[A-Za-z][A-Za-z0-9-]*: \S/.test(l));
   const out = trailers ? paragraphs.slice(0, -1) : [...paragraphs];
-  if (steps.length > 0) out.push(`Built in steps:\n${steps.map((s) => `- ${s}`).join("\n")}`);
+  if (paragraph.trim() !== "") out.push(paragraph.trim());
   if (trailers) out.push(last);
   return `${out.join("\n\n")}\n`;
+}
+
+// The message for a task's squashed commit: the merge's message, with the
+// subjects of the stacked commits that built it listed before its trailers.
+export function squashMessage(merge: string, steps: string[]): string {
+  return beforeTrailers(merge, steps.length > 0 ? `Built in steps:\n${steps.map((s) => `- ${s}`).join("\n")}` : "");
+}
+
+// The spec a design was approved with: its "## Acceptance cases" and
+// "## Non-goals" sections, and the approver's comment. It goes into the tests
+// commit, so every later step and an adopted review run read the same spec.
+export function extractSpec(design: string, approval: string): string {
+  const section = (heading: string): string => {
+    const m = new RegExp(`^##\\s+${heading}\\s*$([\\s\\S]*?)(?=^##\\s|(?![\\s\\S]))`, "mi").exec(design);
+    return m ? m[1].trim() : "";
+  };
+  const cases = section("Acceptance cases");
+  const nonGoals = section("Non-goals");
+  if (cases === "") throw new Error('the approved design has no "## Acceptance cases" section');
+  const parts = [`Spec: acceptance cases\n${cases}`, `Spec: non-goals\n${nonGoals === "" ? "(none stated)" : nonGoals}`];
+  if (approval.trim() !== "") parts.push(`Spec: approved with\n${approval.trim()}`);
+  return parts.join("\n\n");
 }
 
 async function git(args: string[]): Promise<string> {
@@ -322,6 +352,14 @@ export async function step(name: string, a: Args): Promise<void> {
     case "history":
       console.log(await history(a.artifacts));
       return;
+    case "spec-check": {
+      // Fails the run before any building if the approved design has no
+      // acceptance cases; prints the spec the tests commit will carry.
+      const approval = join(a.artifacts, "approval.txt");
+      const design = await readFile(join(a.artifacts, "design.md"), "utf8");
+      console.log(extractSpec(design, existsSync(approval) ? await readFile(approval, "utf8") : ""));
+      return;
+    }
     case "lane":
       return;
     case "red":

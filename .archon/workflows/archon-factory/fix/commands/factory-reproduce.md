@@ -9,7 +9,7 @@ The task, as dex JSON:
 
 $task.output
 
-Read AGENTS.md first, then find the code at fault. Write the smallest test that fails because of the bug and will pass once it's fixed. Use recorded inputs in `testdata/` where the bug depends on real data. Don't fix the bug or change any non-test code.
+Read AGENTS.md first, then find the code at fault. Write the smallest test that fails because of the bug and will pass once it's fixed; it, with the task's description of the bug, is the spec the fix is reviewed against. Use recorded inputs in `testdata/` where the bug depends on real data. Don't fix the bug or change any non-test code. Edit files with the editor tools, not `sed`, `perl`, `python` or heredocs.
 
 Run the project's tests and confirm that the new test fails for the reason the task describes. A separate check runs the suite after you, and it fails the run if no test files changed or if the suite passes.
 

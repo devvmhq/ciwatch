@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 bun test ./.shared/factory.test.ts
 
 status=0
-for f in scripts/factory.ts commands/factory-adversarial-review.md commands/factory-fix-findings.md commands/factory-commit-message.md; do
+for f in scripts/factory.ts commands/factory-adversarial-review.md commands/factory-fix-findings.md commands/factory-commit-message.md commands/factory-polish.md; do
   for w in fix review; do
     if ! cmp -s "feature/$f" "$w/$f"; then
       echo "check: feature/$f and $w/$f differ; they must be copies" >&2

@@ -5,7 +5,44 @@ import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { checkpoint, isTestPath, setLane, squash, squashMessage, trimDiff } from "./factory.ts";
+import { checkpoint, extractSpec, isTestPath, setLane, squash, squashMessage, trimDiff } from "./factory.ts";
+
+describe("extractSpec", () => {
+  const design = [
+    "# Design: x",
+    "",
+    "## 1. What changes",
+    "Words.",
+    "",
+    "## Acceptance cases",
+    "1. AC-1: `ciwatch HEAD` with one failed run exits 1.",
+    "2. AC-2: `--json` has a `runs` array.",
+    "",
+    "## Non-goals",
+    "- Watching.",
+    "",
+    "## Questions",
+    "1. None.",
+  ].join("\n");
+
+  test("takes the acceptance cases, the non-goals and the approval comment", () => {
+    expect(extractSpec(design, "Approved; use exit 4 for X.\n")).toBe(
+      [
+        "Spec: acceptance cases\n1. AC-1: `ciwatch HEAD` with one failed run exits 1.\n2. AC-2: `--json` has a `runs` array.",
+        "Spec: non-goals\n- Watching.",
+        "Spec: approved with\nApproved; use exit 4 for X.",
+      ].join("\n\n"),
+    );
+  });
+
+  test("reads a section that ends the design", () => {
+    expect(extractSpec("## Acceptance cases\nAC-1: y", "")).toBe("Spec: acceptance cases\nAC-1: y\n\nSpec: non-goals\n(none stated)");
+  });
+
+  test("refuses a design without acceptance cases", () => {
+    expect(() => extractSpec("## Non-goals\n- x", "")).toThrow("no \"## Acceptance cases\"");
+  });
+});
 
 describe("squashMessage", () => {
   test("lists the steps before the trailers", () => {
@@ -91,6 +128,18 @@ describe("checkpoint", () => {
     expect(await checkpoint(artifacts, "tests")).toMatch(/^[0-9a-f]+ test\(a\): a failing test$/);
     expect(await log()).toEqual(["test(a): a failing test", "init"]);
     expect(existsSync(join(artifacts, "commit-tests.txt"))).toBe(false);
+  });
+
+  test("records the approved spec in the tests commit, before its trailers", async () => {
+    const { artifacts } = await repo();
+    await writeFile("a_test.go", "package a\n");
+    await writeFile(join(artifacts, "design.md"), "## Acceptance cases\nAC-1: a fails\n\n## Non-goals\n- b\n");
+    await writeFile(join(artifacts, "approval.txt"), "Approved.\n");
+    await writeFile(join(artifacts, "commit-tests.txt"), "test(a): a fails\n\nCo-Authored-By: Someone <s@example.com>\n");
+    await checkpoint(artifacts, "tests");
+    expect((await $`git log -1 ${"--format=%B"}`.quiet().text()).trim()).toBe(
+      "test(a): a fails\n\nSpec: acceptance cases\nAC-1: a fails\n\nSpec: non-goals\n- b\n\nSpec: approved with\nApproved.\n\nCo-Authored-By: Someone <s@example.com>",
+    );
   });
 
   test("commits nothing for a stage that changed nothing", async () => {

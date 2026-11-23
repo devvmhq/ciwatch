@@ -1,10 +1,11 @@
 name: review
 description: >-
   Continue a feature or fix run whose adversarial review hit its cap: adopt
-  that run's branch, review it again (at most 3 more rounds, the reviewer
-  seeing every earlier round's findings), pass the mise gate and your review,
-  then land the branch on local main with a merge commit. Never pushes. Start
-  it with the pack's bin/factory: `factory review <dex-id> <run-id>`.
+  that run's branch, review it again against its spec (at most 3 more rounds,
+  the reviewer seeing every earlier round's findings, stopping to ask you if the
+  fixes go in circles), a polish step for minor findings, the mise gate and your
+  review, then land the branch on local main with a merge commit. Never pushes.
+  Start it with the pack's bin/factory: `factory review <dex-id> <run-id>`.
 provider: claude
 model: sonnet
 worktree:
@@ -28,14 +29,14 @@ nodes:
     loop_group:
       max_iterations: 3
       fresh_context: true
-      until_bash: 'ship=$review.output.ship; [ "$ship" = true ]'
+      until_bash: 'ship=$review.output.ship; churn=$review.output.churn; [ "$ship" = true ] || [ "$churn" = true ]'
       nodes:
         - id: diff
           script: factory
           runtime: bun
           with: { step: diff, task: $INPUTS.task, lane: review }
 
-        # The branch's commit messages, earlier rounds' findings included.
+        # The branch's commit messages: the spec and earlier rounds' findings.
         - id: history
           script: factory
           runtime: bun
@@ -50,6 +51,7 @@ nodes:
             type: object
             properties:
               ship: { type: boolean }
+              churn: { type: boolean }
               summary: { type: string }
               findings:
                 type: array
@@ -61,12 +63,16 @@ nodes:
                     severity: { type: string, enum: [blocker, major, minor] }
                     problem: { type: string }
                     fix: { type: string }
-                  required: [file, severity, problem, fix]
-            required: [ship, summary, findings]
+                    from_previous_fix: { type: boolean }
+                  required: [file, severity, problem, fix, from_previous_fix]
+              backlog:
+                type: array
+                items: { type: string }
+            required: [ship, churn, summary, findings, backlog]
 
         - id: fix
           depends_on: [review]
-          when: "$review.output.ship != true"
+          when: "$review.output.ship != true && $review.output.churn != true"
           command: factory-fix-findings
 
         - id: commit-review
@@ -76,9 +82,9 @@ nodes:
           with: { step: checkpoint-review, task: $INPUTS.task, lane: "" }
 
         # The group's output is its terminal nodes' output, and the fix and its
-        # commit are skipped when the reviewer ships, so this node always gives
-        # the verdict. Archon substitutes $review.output into bash already
-        # shell-quoted.
+        # commit are skipped when the reviewer ships or calls churn, so this
+        # node always gives the verdict. Archon substitutes $review.output into
+        # bash already shell-quoted.
         - id: verdict
           depends_on: [review, commit-review]
           trigger_rule: none_failed_min_one_success
@@ -86,9 +92,49 @@ nodes:
             verdict=$review.output
             printf '%s\n' "$verdict"
 
+  # Churn: ask for a design change instead of another round.
+  - id: redesign
+    depends_on: [review-loop]
+    when: "$review-loop.output.churn == true"
+    wait:
+      form: approval
+      attention: |
+        The review of dex task $INPUTS.task stopped: its blocker or major
+        findings came from the previous round's fix, so another round would
+        likely go in circles. Reject with a reason to stop here and redesign
+        (the branch is kept), or approve to carry on to the polish step and
+        the gate, with these findings left open for your final review.
+
+        Last adversarial review:
+        $review-loop.output
+
+  - id: redesign-rejected
+    depends_on: [redesign]
+    when: "$redesign.output.decision == 'reject'"
+    cancel: Stopped for a design change after the review went in circles.
+
+  # Lane: polish. Runs after the loop, or after an approved stop; a rejected
+  # one cancels the run first.
+  - id: lane-polish
+    depends_on: [review-loop, redesign]
+    trigger_rule: none_failed_min_one_success
+    script: factory
+    runtime: bun
+    with: { step: lane, task: $INPUTS.task, lane: polish }
+
+  - id: polish
+    depends_on: [lane-polish]
+    command: factory-polish
+
+  - id: commit-polish
+    depends_on: [polish]
+    script: factory
+    runtime: bun
+    with: { step: checkpoint-polish, task: $INPUTS.task, lane: "" }
+
   # Lane: gate.
   - id: gate
-    depends_on: [review-loop]
+    depends_on: [commit-polish]
     script: factory
     runtime: bun
     with: { step: gate, task: $INPUTS.task, lane: gate }
@@ -123,10 +169,10 @@ nodes:
     wait:
       form: approval
       attention: |
-        Dex task $INPUTS.task passed its continued review and the gate, and is
-        ready for your review. Approve to land its branch on local main with a
-        merge commit (nothing is pushed), or reject with a reason to stop here
-        and keep the worktree and its branch.
+        Dex task $INPUTS.task passed its continued review, polish and the gate,
+        and is ready for your review. Approve to land its branch on local main
+        with a merge commit (nothing is pushed), or reject with a reason to stop
+        here and keep the worktree and its branch.
 
         Merge commit message:
 

@@ -31,9 +31,11 @@ case $workflow in
     [ $# -ge 1 ] || usage
     run=$1
     shift
-    # A new run, with the pack as it is now, on the capped run's branch.
-    exec archon workflow run review --adopt "$run" --input task="$task" --detach --json "$@" \
-      "review dex task $task, continuing run $run"
+    # A new run on the capped run's branch. That branch carries the vendored
+    # copy it was started with, which may predate this workflow, so the run
+    # uses the installed pack (archon plugin add devvmhq/archon-factory).
+    exec archon workflow run devvmhq/archon-factory:review --adopt "$run" --input task="$task" \
+      --detach --json "$@" "review dex task $task, continuing run $run"
     ;;
   *) usage ;;
 esac
