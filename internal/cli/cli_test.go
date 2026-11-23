@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/devvmhq/ciwatch/internal/cli"
@@ -20,6 +22,9 @@ import (
 )
 
 const sha = "3bb2dccd75a2754b8d45e522b3c26c22bc66a21a"
+
+// checkoutRoot is what the fake git prints for git rev-parse --show-toplevel.
+const checkoutRoot = "/repo"
 
 var ghArgs = []string{"run", "list", "--commit", sha, "--limit", "100", "--json", "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event"}
 
@@ -34,6 +39,10 @@ type counts struct {
 	logIDs  []string // the job ids of those calls, in order
 	events  []string // "list" and "view", in the order gh ran them
 	clock   *fakeClock
+
+	artifactIDs []string   // the run ids of the gh api artifacts calls, in order
+	downloads   [][]string // the args of each gh run download call
+	opened      []string   // the roots the App opened as the checkout
 }
 
 // testInterval and testGrace are what the fake helpers set on the App.
@@ -106,6 +115,12 @@ type fakeOpts struct {
 	logErrCalls map[string]int    // job id to how many of its first log calls fail with a network error
 	onLog       func(id string)   // runs before gh run view --log-failed answers
 
+	artifacts    map[string]string // run id to the output of gh api .../artifacts: a fixture name, or JSON if it starts with {; none if absent
+	artifactsErr map[string]error  // run id to the error the artifacts call fails with
+	checkout     fstest.MapFS      // the files of the checkout the App opens
+	downloadErr  map[string]error  // artifact name to the error gh run download fails with
+	toplevelErr  error             // the error git rev-parse --show-toplevel fails with
+
 	listFixtures []string      // gh run list prints these fixtures, one per call, the last repeated
 	listRaw      []string      // like listFixtures, but the output itself
 	listErr      map[int]error // call number (from 1) to the error gh run list fails with
@@ -163,11 +178,36 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 			return nil, ctx.Err()
 		}
 		switch {
+		case name == "git" && slices.Equal(args, []string{"rev-parse", "--show-toplevel"}):
+			if opts.toplevelErr != nil {
+				return nil, opts.toplevelErr
+			}
+			return []byte(checkoutRoot + "\n"), nil
 		case name == "git":
 			if gitErr != nil {
 				return nil, gitErr
 			}
 			return []byte(sha + "\n"), nil
+		case name == "gh" && len(args) == 4 && args[0] == "api":
+			id := strings.TrimSuffix(strings.TrimPrefix(args[1], "repos/{owner}/{repo}/actions/runs/"), "/artifacts?per_page=100")
+			if want := []string{"api", "repos/{owner}/{repo}/actions/runs/" + id + "/artifacts?per_page=100", "--jq", "{total_count, artifacts: [.artifacts[] | {name}]}"}; !slices.Equal(args, want) {
+				t.Errorf("gh args = %q, want %q", args, want)
+			}
+			c.artifactIDs = append(c.artifactIDs, id)
+			if err := opts.artifactsErr[id]; err != nil {
+				return nil, err
+			}
+			switch out, ok := opts.artifacts[id]; {
+			case !ok:
+				return []byte(`{"total_count":0,"artifacts":[]}`), nil
+			case strings.HasPrefix(out, "{"):
+				return []byte(out), nil
+			default:
+				return readFixture(t, out), nil
+			}
+		case name == "gh" && len(args) == 7 && args[0] == "run" && args[1] == "download":
+			c.downloads = append(c.downloads, args)
+			return nil, opts.downloadErr[args[4]]
 		case name == "gh" && len(args) >= 4 && args[0] == "run" && args[1] == "list" && args[2] == "--branch":
 			c.branch++
 			if len(args) != 10 || args[6] != "--limit" || args[7] != "1" {
@@ -239,6 +279,10 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 		t.Errorf("unexpected command %s %q", name, args)
 		return nil, errors.New("unexpected command")
 	}}}
+	app.OpenDir = func(root string) fs.FS {
+		c.opened = append(c.opened, root)
+		return opts.checkout
+	}
 	app, c.clock = withClock(app, now)
 	c.clock.hook = opts.onWait
 	c.clock.hold = opts.holdWait
@@ -251,6 +295,9 @@ func inline(list, jobs string) cli.App {
 	app, _ := withClock(cli.App{GH: gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
 		if name == "git" {
 			return []byte(sha + "\n"), nil
+		}
+		if len(args) > 0 && args[0] == "api" {
+			return []byte(`{"total_count":0,"artifacts":[]}`), nil
 		}
 		if len(args) >= 2 && args[1] == "view" {
 			return []byte(jobs), nil

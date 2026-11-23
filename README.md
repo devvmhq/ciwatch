@@ -18,12 +18,14 @@ It isn't usable yet: the commands are being built one at a time.
 ## Usage
 
 ```sh
-ciwatch [--json] [--once] [--go-tests] <commit>
+ciwatch [--json] [--once] [--go-tests] [--fetch-crashes] <commit>
 ```
 
 ciwatch polls until every run for the commit has completed, and keeps looking for new runs for 60 seconds after the push so runs that start late are included. If the commit's runs were created longer ago than that (a commit pushed before, or pushed again), it looks for 60 seconds from when ciwatch started instead, so the new push's runs are caught and an old commit waits that long once. It writes a progress line to stderr whenever a run changes, then prints the final table (or the `--json` document) to stdout. With `--once` it checks a single time instead, and exits 4 if runs are still going. A `gh` call that fails with a network error or a temporary GitHub error (HTTP 502, 503 or 504) is retried up to 8 times, waiting 1s, 2s, 4s and so on up to 30s between tries, and ciwatch says on stderr what it is waiting for; only when the retries run out does it exit 4. The exception is the jobs fetch: if fetching a run's jobs runs out of retries, ciwatch warns on stderr, shows `(jobs unavailable)` for that run, and keeps the exit code the runs' conclusions give rather than exiting 4.
 
 For each cancelled run on a branch, ciwatch makes one more call, for the newest run of the same workflow on the same branch (found by the workflow's ID). If that run is for a different commit and was created after the cancelled run, its table row ends in `(newer run <id> for <short sha>)`, `--json` adds `newer_run` (`id` and `sha`) to the run, and the last stderr lines, one per such run in table order, say `ciwatch: run <id> (<workflow>) was cancelled; to watch the newer run: ciwatch <sha>`. ciwatch doesn't claim the newer run caused the cancellation, and doesn't watch it on its own. Otherwise the run is reported as plainly cancelled. Either way a cancelled run exits 3, unless another run failed, which exits 1. If the look for a newer run runs out of retries, ciwatch warns on stderr and reports the run as plainly cancelled.
+
+For each failed run (`failure` or `timed_out`), ciwatch lists the run's artifacts once and takes those named `crash-<Target>` (a Go fuzz target, `Fuzz…`) as fuzz crash inputs. They are listed under the table as `<Target> (crash-<Target>, run <id>)`, `--json` gives them as `fuzz_crashes` on the run, and the last stderr line says to rerun with `--fetch-crashes`. With `--fetch-crashes`, each is downloaded with `gh run download` into `testdata/fuzz/<Target>/` beside the one `_test.go` file in the checkout that declares `func <Target>(f *testing.F)`; if no file or more than one declares it, ciwatch warns and skips that download. A failed listing or download is a warning and never changes the exit code. A run with more than 100 artifacts is checked only for the first 100.
 
 The `--json` fields and the exit codes are described in [docs/json.md](docs/json.md).
 

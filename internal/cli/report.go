@@ -28,7 +28,21 @@ type Run struct {
 	Jobs       []Job  `json:"jobs"`
 	JobsError  string `json:"jobs_error,omitempty"`
 
+	FuzzCrashes    []FuzzCrash `json:"fuzz_crashes,omitempty"`    // only for a failed run with crash-<Target> artifacts
+	ArtifactsError string      `json:"artifacts_error,omitempty"` // only when the run's artifacts could not be listed
+
 	NewerRun *NewerRun `json:"newer_run,omitempty"` // only for a cancelled run with a newer run behind it
+}
+
+// FuzzCrash is a fuzz crash input a run uploaded as the artifact crash-<Target>.
+// FetchedTo is where --fetch-crashes put it, relative to the checkout;
+// FetchError says why it didn't.
+type FuzzCrash struct {
+	Target     string `json:"target"`
+	Artifact   string `json:"artifact"`
+	RunID      int64  `json:"run_id"`
+	FetchedTo  string `json:"fetched_to,omitempty"`
+	FetchError string `json:"fetch_error,omitempty"`
 }
 
 // NewerRun is the newest run of a cancelled run's workflow on its branch, when
@@ -90,7 +104,10 @@ func buildReport(sha string, runs []runWithJobs, goTests bool) Report {
 				}
 			}
 		}
-		out.Runs[i] = Run{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr}
+		out.Runs[i] = Run{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr, ArtifactsError: r.ArtifactsErr}
+		for _, c := range r.Crashes {
+			out.Runs[i].FuzzCrashes = append(out.Runs[i].FuzzCrashes, FuzzCrash{Target: c.Target, Artifact: c.Artifact, RunID: r.ID, FetchedTo: c.FetchedTo, FetchError: c.FetchErr})
+		}
 		if r.Newer != nil {
 			out.Runs[i].NewerRun = &NewerRun{ID: r.Newer.ID, SHA: r.Newer.HeadSHA}
 		}
@@ -131,6 +148,23 @@ func (rep Report) WriteTable(w io.Writer, maxLines int) error {
 			if j.Steps != nil || j.LogError != "" {
 				writeFailureBlock(w, r, j, maxLines)
 			}
+		}
+	}
+	first := true
+	for _, r := range rep.Runs {
+		for _, c := range r.FuzzCrashes {
+			if first {
+				_, _ = fmt.Fprint(w, "\nFuzz crash inputs:\n")
+				first = false
+			}
+			line := fmt.Sprintf("  %s (%s, run %d)", c.Target, c.Artifact, c.RunID)
+			switch {
+			case c.FetchedTo != "":
+				line += ": fetched to " + c.FetchedTo
+			case c.FetchError != "":
+				line += ": not fetched"
+			}
+			_, _ = fmt.Fprintln(w, line)
 		}
 	}
 	return nil

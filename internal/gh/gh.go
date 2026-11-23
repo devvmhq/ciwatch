@@ -247,6 +247,58 @@ func (r Runner) FailedLog(ctx context.Context, runID, jobID int64) ([]byte, erro
 	return out, nil
 }
 
+// ArtifactsLimit is how many artifacts Artifacts asks for. A run with more has
+// artifacts it doesn't return.
+const ArtifactsLimit = 100
+
+// Artifact is one artifact a workflow run uploaded.
+type Artifact struct {
+	Name string
+}
+
+// Artifacts lists the first ArtifactsLimit artifacts of the run runID, once,
+// and total is how many the run has. gh api prints the API's JSON, which --jq
+// cuts down to the fields ciwatch reads.
+func (r Runner) Artifacts(ctx context.Context, runID int64) (arts []Artifact, total int, err error) {
+	id := strconv.FormatInt(runID, 10)
+	out, err := r.Exec(ctx, "gh", "api", "repos/{owner}/{repo}/actions/runs/"+id+"/artifacts?per_page="+strconv.Itoa(ArtifactsLimit),
+		"--jq", "{total_count, artifacts: [.artifacts[] | {name}]}")
+	if err != nil {
+		return nil, 0, fmt.Errorf("gh api artifacts of run %s: %w", id, markNetwork(err))
+	}
+	var raw struct {
+		Total     int `json:"total_count"`
+		Artifacts []struct {
+			Name string `json:"name"`
+		} `json:"artifacts"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, 0, fmt.Errorf("decoding gh api output: %w", err)
+	}
+	for _, a := range raw.Artifacts {
+		arts = append(arts, Artifact{Name: a.Name})
+	}
+	return arts, raw.Total, nil
+}
+
+// DownloadArtifact downloads the artifact name of the run runID into dir.
+func (r Runner) DownloadArtifact(ctx context.Context, runID int64, name, dir string) error {
+	id := strconv.FormatInt(runID, 10)
+	if _, err := r.Exec(ctx, "gh", "run", "download", id, "-n", name, "-D", dir); err != nil {
+		return fmt.Errorf("gh run download %s -n %s: %w", id, name, markNetwork(err))
+	}
+	return nil
+}
+
+// Toplevel returns the root directory of the git checkout the command runs in.
+func (r Runner) Toplevel(ctx context.Context) (string, error) {
+	out, err := r.Exec(ctx, "git", "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse --show-toplevel: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // ResolveCommit turns ref into a full commit SHA.
 func (r Runner) ResolveCommit(ctx context.Context, ref string) (string, error) {
 	out, err := r.Exec(ctx, "git", "rev-parse", "--verify", "--end-of-options", ref+"^{commit}")

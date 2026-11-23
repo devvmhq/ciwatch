@@ -9,9 +9,15 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/devvmhq/ciwatch/internal/fuzztarget"
 	"github.com/devvmhq/ciwatch/internal/gh"
 	"github.com/devvmhq/ciwatch/internal/steplog"
 	"github.com/devvmhq/ciwatch/internal/testlog"
@@ -26,13 +32,15 @@ const (
 	ExitUnchecked = 4
 )
 
-const usage = `usage: ciwatch [--json] [--once] [--go-tests] <commit>
+const usage = `usage: ciwatch [--json] [--once] [--go-tests] [--fetch-crashes] <commit>
 
 Watches every GitHub Actions run for a commit until it finishes. For a
 cancelled run, it names the newer run of the same workflow on the same branch,
 if there is one, and the command to watch it. A failed job shows the last
 lines of each failed step; with --go-tests, it also shows the failing Go tests
-found in its log.
+found in its log. A failed run's crash-<Target> artifacts are listed as fuzz
+crash inputs; with --fetch-crashes, each is downloaded into
+testdata/fuzz/<Target>/ beside the test file that declares the target.
 `
 
 // Clock is the time, which tests control.
@@ -58,6 +66,8 @@ type App struct {
 	Retries    int           // how many times to retry one gh call
 
 	MaxTestLines int // the most lines of one failing test the table shows; 0 shows them all
+
+	OpenDir func(string) fs.FS // opens the checkout at a directory; os.DirFS if nil
 }
 
 // New returns an App that runs the real gh and git.
@@ -65,6 +75,7 @@ func New() App {
 	return App{
 		GH: gh.Runner{Exec: gh.Exec}, Clock: realClock{}, Interval: 10 * time.Second, Grace: 60 * time.Second,
 		Backoff: time.Second, MaxBackoff: 30 * time.Second, Retries: 8, MaxTestLines: 20,
+		OpenDir: os.DirFS,
 	}
 }
 
@@ -134,6 +145,11 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		return ExitUnchecked
 	}
 
+	if err := a.crashes(ctx, withJobs, opts.fetchCrashes, stderr); err != nil { // Ctrl-C: no partial table
+		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
+		return ExitUnchecked
+	}
+
 	report := buildReport(sha, withJobs, opts.goTests)
 	if opts.json {
 		err = report.WriteJSON(stdout)
@@ -154,6 +170,18 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			_, _ = fmt.Fprintf(stderr, "ciwatch: run %d (%s) was cancelled; to watch the newer run: ciwatch %s\n", r.ID, r.Workflow, n.HeadSHA)
 		}
 	}
+	if !opts.fetchCrashes {
+		n := 0
+		for _, r := range withJobs {
+			n += len(r.Crashes)
+		}
+		switch {
+		case n == 1:
+			_, _ = fmt.Fprintf(stderr, "ciwatch: 1 fuzz crash input not fetched; to fetch it: ciwatch --fetch-crashes %s\n", sha)
+		case n > 1:
+			_, _ = fmt.Fprintf(stderr, "ciwatch: %d fuzz crash inputs not fetched; to fetch them: ciwatch --fetch-crashes %s\n", n, sha)
+		}
+	}
 	if code == ExitOK && len(runs) >= gh.RunListLimit {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: gh listed %d runs, the most it returns, so there may be more; can't vouch for a pass\n", len(runs))
 		return ExitUnchecked
@@ -168,6 +196,124 @@ type runWithJobs struct {
 	Jobs    []jobResult
 	JobsErr string
 	Newer   *gh.Run // the newest run of the workflow on the branch, if it is for a newer commit
+
+	Crashes      []crash // the fuzz crash inputs among the run's artifacts
+	ArtifactsErr string  // why the artifacts couldn't be listed
+}
+
+// crash is a crash-<Target> artifact. FetchedTo is the directory it was
+// downloaded to, relative to the checkout; FetchErr says why it wasn't.
+type crash struct {
+	Target, Artifact string
+	FetchedTo        string
+	FetchErr         string
+}
+
+var crashName = regexp.MustCompile(`^crash-(Fuzz[A-Za-z0-9_]*)$`)
+
+// crashes lists the artifacts of each failed run and takes those named
+// crash-<Target> as fuzz crash inputs; with fetch it downloads each one beside
+// the test file that declares its target. A failure is a warning on stderr and
+// a field of the run. It returns an error only when ctx is cancelled.
+func (a App) crashes(ctx context.Context, runs []runWithJobs, fetch bool, stderr io.Writer) error {
+	listApp := a
+	for i, r := range runs {
+		if r.Status != "completed" || (r.Conclusion != "failure" && r.Conclusion != "timed_out") {
+			continue
+		}
+		type listing struct {
+			arts  []gh.Artifact
+			total int
+		}
+		got, err := retry(ctx, listApp, stderr, fmt.Sprintf("gh api artifacts of run %d", r.ID), func() (listing, error) {
+			arts, total, err := a.GH.Artifacts(ctx, r.ID)
+			return listing{arts, total}, err
+		})
+		if err != nil && ctx.Err() != nil {
+			return err
+		}
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "ciwatch: can't list artifacts for run %d (%s): %v\n", r.ID, r.Workflow, err)
+			runs[i].ArtifactsErr = err.Error()
+			if errors.Is(err, gh.ErrNetwork) || errors.Is(err, gh.ErrTemporary) {
+				listApp.Retries = 0 // as for jobs: the network is likely still down
+			}
+			continue
+		}
+		listApp.Retries = a.Retries
+		if got.total > gh.ArtifactsLimit {
+			_, _ = fmt.Fprintf(stderr, "ciwatch: run %d (%s) has %d artifacts; only the first %d were checked for crash inputs\n", r.ID, r.Workflow, got.total, gh.ArtifactsLimit)
+		}
+		for _, art := range got.arts {
+			if m := crashName.FindStringSubmatch(art.Name); m != nil {
+				runs[i].Crashes = append(runs[i].Crashes, crash{Target: m[1], Artifact: art.Name})
+			}
+		}
+	}
+	if !fetch {
+		return nil
+	}
+	return a.fetchCrashes(ctx, runs, stderr)
+}
+
+// fetchCrashes downloads the crash inputs of runs, once the checkout is known.
+func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Writer) error {
+	var root string
+	var rootErr error
+	var fsys fs.FS
+	opened := false
+	dlApp := a
+	for i, r := range runs {
+		for k, c := range r.Crashes {
+			fail := func(msg string) {
+				_, _ = fmt.Fprintf(stderr, "ciwatch: can't fetch %s of run %d: %s\n", c.Artifact, r.ID, msg)
+				runs[i].Crashes[k].FetchErr = msg
+			}
+			if !opened {
+				opened = true
+				if root, rootErr = a.GH.Toplevel(ctx); rootErr == nil {
+					open := a.OpenDir
+					if open == nil {
+						open = os.DirFS
+					}
+					fsys = open(root)
+				}
+			}
+			if rootErr != nil {
+				fail(rootErr.Error())
+				continue
+			}
+			files, err := fuzztarget.Declaring(fsys, c.Target)
+			switch {
+			case err != nil:
+				fail(fmt.Sprintf("looking for %s in the checkout: %v", c.Target, err))
+				continue
+			case len(files) == 0:
+				fail(fmt.Sprintf("no _test.go file declares func %s(f *testing.F)", c.Target))
+				continue
+			case len(files) > 1:
+				fail(fmt.Sprintf("%s is declared in %s", c.Target, strings.Join(files, ", ")))
+				continue
+			}
+			rel := path.Join(path.Dir(files[0]), "testdata", "fuzz", c.Target)
+			_, err = retry(ctx, dlApp, stderr, fmt.Sprintf("gh run download %d -n %s", r.ID, c.Artifact), func() (struct{}, error) {
+				return struct{}{}, a.GH.DownloadArtifact(ctx, r.ID, c.Artifact, filepath.Join(root, filepath.FromSlash(rel)))
+			})
+			if err != nil && ctx.Err() != nil {
+				return err
+			}
+			if err != nil {
+				fail(err.Error())
+				if errors.Is(err, gh.ErrNetwork) || errors.Is(err, gh.ErrTemporary) {
+					dlApp.Retries = 0
+				}
+				continue
+			}
+			dlApp.Retries = a.Retries
+			runs[i].Crashes[k].FetchedTo = rel
+		}
+	}
+	return nil
 }
 
 // jobResult is a job and, if it failed in a completed run, the end of its
@@ -264,9 +410,11 @@ type options struct {
 	json    bool
 	once    bool
 	goTests bool
+
+	fetchCrashes bool
 }
 
-// parseArgs accepts --json, --once, --go-tests and one commit, in any order.
+// parseArgs accepts --json, --once, --go-tests, --fetch-crashes and one commit, in any order.
 func parseArgs(args []string) (options, error) {
 	var o options
 	fs := flag.NewFlagSet("ciwatch", flag.ContinueOnError)
@@ -274,6 +422,7 @@ func parseArgs(args []string) (options, error) {
 	fs.BoolVar(&o.json, "json", false, "")
 	fs.BoolVar(&o.once, "once", false, "")
 	fs.BoolVar(&o.goTests, "go-tests", false, "")
+	fs.BoolVar(&o.fetchCrashes, "fetch-crashes", false, "")
 	var positional []string
 	for {
 		if err := fs.Parse(args); err != nil {

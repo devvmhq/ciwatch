@@ -22,6 +22,13 @@ Schema 1 is not frozen yet: it freezes at ciwatch's first release, and until the
 | `runs[].url` | string | always |
 | `runs[].jobs` | array of objects | always, empty if the jobs could not be fetched |
 | `runs[].jobs_error` | string | only when the run's jobs could not be fetched |
+| `runs[].fuzz_crashes` | array of objects | only for a failed run (`failure` or `timed_out`) with `crash-Fuzz<Name>` artifacts, in the order the API lists them |
+| `runs[].fuzz_crashes[].target` | string | always, with `fuzz_crashes`: the fuzz target, from the artifact name |
+| `runs[].fuzz_crashes[].artifact` | string | always, with `fuzz_crashes`: the artifact's name, `crash-<target>` |
+| `runs[].fuzz_crashes[].run_id` | integer | always, with `fuzz_crashes`: the run the artifact belongs to |
+| `runs[].fuzz_crashes[].fetched_to` | string | only with `--fetch-crashes`, once downloaded: the directory, relative to the checkout |
+| `runs[].fuzz_crashes[].fetch_error` | string | only with `--fetch-crashes`, when the download was skipped or failed |
+| `runs[].artifacts_error` | string | only when the run's artifacts could not be listed |
 | `runs[].newer_run` | object | only for a cancelled run whose workflow has a newer run on the branch, for another commit |
 | `runs[].newer_run.id` | integer | always, with `newer_run`: the newer run's ID |
 | `runs[].newer_run.sha` | string | always, with `newer_run`: the newer run's commit |

@@ -75,6 +75,8 @@ func (s site) app(t *testing.T) (cli.App, *siteCalls) {
 			return load(f), nil
 		case name == "gh" && len(args) == 5 && args[1] == "view":
 			return []byte(noJobs), nil
+		case name == "gh" && len(args) == 4 && args[0] == "api": // a failed run's artifacts
+			return []byte(`{"total_count":0,"artifacts":[]}`), nil
 		}
 		t.Errorf("unexpected command %s %q", name, args)
 		return nil, errors.New("unexpected command")
@@ -235,7 +237,7 @@ func TestFollowIsAUsageError(t *testing.T) { // AC-5
 	if !strings.HasPrefix(stderr.String(), "ciwatch: flag provided but not defined: -follow\n") {
 		t.Errorf("stderr = %q, want it to start with the undefined-flag error", stderr.String())
 	}
-	if _, rest, _ := strings.Cut(stderr.String(), "\n"); !strings.Contains(rest, "usage: ciwatch [--json] [--once] [--go-tests] <commit>") {
+	if _, rest, _ := strings.Cut(stderr.String(), "\n"); !strings.Contains(rest, "usage: ciwatch [--json] [--once] [--go-tests] [--fetch-crashes] <commit>") {
 		t.Errorf("stderr = %q, want the usage after the error", stderr.String())
 	}
 	if calls != 0 {
