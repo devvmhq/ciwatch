@@ -388,32 +388,38 @@ func TestRunListDecodesHeadBranchAndSHA(t *testing.T) {
 	}
 }
 
-func TestBranchRunsArgs(t *testing.T) {
-	from := time.Date(2026, 11, 13, 3, 47, 33, 0, time.UTC)
-	to := from.Add(6*time.Minute + 45*time.Second)
-	want := []string{"run", "list", "--branch", "main", "--workflow", "409041453", "--created", "2026-11-13T03:47:33Z..2026-11-13T03:54:18Z", "--event", "push", "--limit", "20", "--json", headFields}
+func TestLatestRunArgs(t *testing.T) { // AC-1
+	want := []string{"run", "list", "--branch", "main", "--workflow", "409041453", "--limit", "1", "--json", headFields}
 	r := gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
 		if name != "gh" || !reflect.DeepEqual(args, want) {
 			t.Errorf("exec %s %q, want gh %q", name, args, want)
 		}
-		return fixture(t, "run-list-branch-superseded.json"), nil
+		return fixture(t, "run-list-latest-newer.json"), nil
 	}}
-	got, err := r.BranchRuns(t.Context(), "main", 409041453, "push", from, to)
+	got, ok, err := r.LatestRun(t.Context(), "main", 409041453)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 20 || got[0].HeadSHA != "90694a414f84ff5d765cdb6c8741e8d3888a2cbb" || got[0].HeadBranch != "main" {
-		t.Errorf("runs = %+v, want the 20 recorded runs, newest 90694a4 on main", got)
+	if !ok || got.ID != 43361860563 || got.HeadSHA != "90694a414f84ff5d765cdb6c8741e8d3888a2cbb" || got.HeadBranch != "main" {
+		t.Errorf("run = %+v, ok = %v, want run 43361860563 for 90694a4 on main", got, ok)
 	}
 }
 
-func TestBranchRunsMarksNetworkErrors(t *testing.T) {
-	from := time.Date(2026, 11, 13, 3, 47, 33, 0, time.UTC)
-	to := from.Add(time.Minute)
+func TestLatestRunEmpty(t *testing.T) {
+	r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
+		return []byte("[]"), nil
+	}}
+	got, ok, err := r.LatestRun(t.Context(), "main", 409041453)
+	if err != nil || ok {
+		t.Errorf("run = %+v, ok = %v, err = %v, want no run and no error", got, ok, err)
+	}
+}
+
+func TestLatestRunMarksNetworkErrors(t *testing.T) {
 	r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
 		return nil, ghFailure(t, "stderr-network-dial.txt")
 	}}
-	_, err := r.BranchRuns(t.Context(), "main", 409041453, "push", from, to)
+	_, _, err := r.LatestRun(t.Context(), "main", 409041453)
 	if !errors.Is(err, gh.ErrNetwork) {
 		t.Errorf("err = %v, want one that is ErrNetwork", err)
 	}

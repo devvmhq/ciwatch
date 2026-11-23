@@ -105,6 +105,9 @@ func walkFields(prefix string, st reflect.Type, out map[string]string) {
 			}
 			out[path] = "array of objects"
 			walkFields(path+"[].", et, out)
+		case ft.Kind() == reflect.Struct:
+			out[path] = "object"
+			walkFields(path+".", ft, out)
 		case ft.Kind() == reflect.String:
 			out[path] = "string"
 		case ft.Kind() >= reflect.Int && ft.Kind() <= reflect.Int64:

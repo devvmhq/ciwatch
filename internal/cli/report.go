@@ -13,10 +13,9 @@ const Schema = 1
 // Report is everything ciwatch found about a commit's runs. Both the --json
 // output and the table are written from it.
 type Report struct {
-	Schema       int      `json:"schema"`
-	SHA          string   `json:"sha"`
-	FollowedFrom []string `json:"followed_from,omitempty"`
-	Runs         []Run    `json:"runs"`
+	Schema int    `json:"schema"`
+	SHA    string `json:"sha"`
+	Runs   []Run  `json:"runs"`
 }
 
 // Run is one workflow run and its jobs.
@@ -29,7 +28,14 @@ type Run struct {
 	Jobs       []Job  `json:"jobs"`
 	JobsError  string `json:"jobs_error,omitempty"`
 
-	SupersededBy string `json:"superseded_by,omitempty"`
+	NewerRun *NewerRun `json:"newer_run,omitempty"` // only for a cancelled run with a newer run behind it
+}
+
+// NewerRun is the newest run of a cancelled run's workflow on its branch, when
+// it is for another commit and was created after the cancelled run.
+type NewerRun struct {
+	ID  int64  `json:"id"`
+	SHA string `json:"sha"`
 }
 
 // Job is one job of a run. A job with Steps or LogError is a failed one whose
@@ -63,8 +69,8 @@ type Test struct {
 
 // buildReport builds the report; goTests says whether the failing tests were
 // looked for.
-func buildReport(sha string, followed []string, runs []runWithJobs, goTests bool) Report {
-	out := Report{Schema: Schema, SHA: sha, FollowedFrom: followed, Runs: make([]Run, len(runs))}
+func buildReport(sha string, runs []runWithJobs, goTests bool) Report {
+	out := Report{Schema: Schema, SHA: sha, Runs: make([]Run, len(runs))}
 	for i, r := range runs {
 		jobs := make([]Job, len(r.Jobs))
 		for k, j := range r.Jobs {
@@ -84,7 +90,10 @@ func buildReport(sha string, followed []string, runs []runWithJobs, goTests bool
 				}
 			}
 		}
-		out.Runs[i] = Run{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr, SupersededBy: r.SupersededBy}
+		out.Runs[i] = Run{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr}
+		if r.Newer != nil {
+			out.Runs[i].NewerRun = &NewerRun{ID: r.Newer.ID, SHA: r.Newer.HeadSHA}
+		}
 	}
 	return out
 }
@@ -102,8 +111,8 @@ func (rep Report) WriteTable(w io.Writer, maxLines int) error {
 	_, _ = fmt.Fprintln(tw, "WORKFLOW\tSTATUS\tCONCLUSION")
 	for _, r := range rep.Runs {
 		note := ""
-		if r.SupersededBy != "" {
-			note = "  (superseded by " + short(r.SupersededBy) + ")"
+		if r.NewerRun != nil {
+			note = fmt.Sprintf("  (newer run %d for %s)", r.NewerRun.ID, short(r.NewerRun.SHA))
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s%s\n", r.Workflow, r.Status, r.Conclusion, note)
 		if r.JobsError != "" {

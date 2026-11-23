@@ -121,9 +121,6 @@ func Exec(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
-// BranchRunsLimit is how many runs BranchRuns asks for.
-const BranchRunsLimit = 20
-
 const runFields = "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event"
 
 // RunList lists the workflow runs for the commit sha, once.
@@ -131,14 +128,15 @@ func (r Runner) RunList(ctx context.Context, sha string) ([]Run, error) {
 	return r.listRuns(ctx, "--commit", sha, "--limit", strconv.Itoa(RunListLimit))
 }
 
-// BranchRuns lists the runs of the workflow workflowID on branch that were
-// created from from to to by the event (push, pull_request...), once. The workflow is named by ID because its name
-// can be a file path, or shared by two workflows, which gh can't select by.
-// The window keeps the list to the runs that matter, however busy the branch.
-func (r Runner) BranchRuns(ctx context.Context, branch string, workflowID int64, event string, from, to time.Time) ([]Run, error) {
-	window := from.UTC().Format(time.RFC3339) + ".." + to.UTC().Format(time.RFC3339)
-	return r.listRuns(ctx, "--branch", branch, "--workflow", strconv.FormatInt(workflowID, 10),
-		"--created", window, "--event", event, "--limit", strconv.Itoa(BranchRunsLimit))
+// LatestRun finds the newest run of the workflow workflowID on branch, once. ok
+// is false if there is none. The workflow is named by ID because its name can
+// be a file path, or shared by two workflows, which gh can't select by.
+func (r Runner) LatestRun(ctx context.Context, branch string, workflowID int64) (run Run, ok bool, err error) {
+	runs, err := r.listRuns(ctx, "--branch", branch, "--workflow", strconv.FormatInt(workflowID, 10), "--limit", "1")
+	if err != nil || len(runs) == 0 {
+		return Run{}, false, err
+	}
+	return runs[0], true, nil
 }
 
 // listRuns runs gh run list with the filter flags and decodes the runs.

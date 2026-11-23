@@ -170,7 +170,10 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 			return []byte(sha + "\n"), nil
 		case name == "gh" && len(args) >= 4 && args[0] == "run" && args[1] == "list" && args[2] == "--branch":
 			c.branch++
-			return []byte("[]"), nil // these tests have no newer push; follow_test.go covers one
+			if len(args) != 10 || args[6] != "--limit" || args[7] != "1" {
+				t.Errorf("gh args = %q, want the newest-run lookup: --branch, --workflow and --limit 1", args)
+			}
+			return []byte("[]"), nil // these tests have no newer run; newer_test.go covers one
 		case name == "gh" && len(args) >= 2 && args[0] == "run" && args[1] == "list":
 			c.list++
 			c.events = append(c.events, "list")
@@ -1339,14 +1342,6 @@ func TestNonNetworkErrorsFailAtOnce(t *testing.T) {
 				t.Errorf("stderr = %q, want no retry line", stderr.String())
 			}
 		})
-	}
-}
-
-func TestUsageNamesFollowOnSeparateLines(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	cli.App{}.Run(t.Context(), nil, &stdout, &stderr)
-	if got := stderr.String(); !strings.Contains(got, "[--follow]") || strings.Contains(got, `\n`) {
-		t.Errorf("stderr = %q, want a usage naming --follow without literal \\n", got)
 	}
 }
 

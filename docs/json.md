@@ -14,7 +14,6 @@ Schema 1 is not frozen yet: it freezes at ciwatch's first release, and until the
 | --- | --- | --- |
 | `schema` | integer | always |
 | `sha` | string | always: the commit the runs are for |
-| `followed_from` | array of strings | only with `--follow`, when commits were left behind |
 | `runs` | array of objects | always |
 | `runs[].id` | integer | always |
 | `runs[].workflow` | string | always |
@@ -23,7 +22,9 @@ Schema 1 is not frozen yet: it freezes at ciwatch's first release, and until the
 | `runs[].url` | string | always |
 | `runs[].jobs` | array of objects | always, empty if the jobs could not be fetched |
 | `runs[].jobs_error` | string | only when the run's jobs could not be fetched |
-| `runs[].superseded_by` | string | only for a run cancelled by a newer push: that commit's sha |
+| `runs[].newer_run` | object | only for a cancelled run whose workflow has a newer run on the branch, for another commit |
+| `runs[].newer_run.id` | integer | always, with `newer_run`: the newer run's ID |
+| `runs[].newer_run.sha` | string | always, with `newer_run`: the newer run's commit |
 | `runs[].jobs[].id` | integer | always |
 | `runs[].jobs[].name` | string | always |
 | `runs[].jobs[].status` | string | always |
