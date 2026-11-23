@@ -9,7 +9,7 @@ $review-loop.output
 
 Usually the reviewer shipped and only minor findings are left. If instead it stopped for churn (`churn` is true) and the human chose to carry on, leave its blocker and major findings alone: they go to the human's final review as they are.
 
-Read AGENTS.md, then fix the minor findings, and only those. Keep each fix small and inside the approved spec. Don't act on the `backlog` notes; they're for future tasks. Edit files with the editor tools, not `sed`, `perl`, `python` or heredocs. If a finding would take more than a small change, or you think it's wrong, leave it and say why.
+Read AGENTS.md, then fix the minor findings, and only those. Keep each fix small and inside the approved spec. Don't act on the `backlog` notes; they're for future tasks. Create and edit every file with the editor tools (Write, Edit), throwaway files included, never from the shell (`cat >`, `echo >`, `tee`, heredocs, `sed -i`, `perl`, `python`); a hook blocks those. Never read a recorded log whole. If a finding would take more than a small change, or you think it's wrong, leave it and say why.
 
 Run `mise run fmt`, `mise run lint` and `mise run test` and leave them passing. Don't run `git commit`; the workflow commits this step on the run's branch. If you changed anything, write the commit message to `$ARTIFACTS_DIR/commit-polish.txt` with the Write tool, following AGENTS.md's rules for commits (unless it says otherwise, Conventional Commits: a `type(scope): summary` line under 72 characters, usually `fix(scope): polish from review`, a blank line, then a body wrapped at 72 characters listing each finding you fixed). Never put a dex or other tracker task ID in it. If you changed nothing, write no message.
 

@@ -1,8 +1,10 @@
 .dex/
 # Project-scoped Archon credentials (archon setup --scope project).
 .archon/.env
-# mise's local lock cache for npm-installed tools (dex).
-.mise/
-/.claude/
+# Claude Code's local files; the project's settings (the factory's
+# write-blocking hook) are shared. mise's .mise/locks/ (the npm lock for dex)
+# is committed with mise.lock, so fresh worktrees can install dex.
+/.claude/*
+!/.claude/settings.json
 /ciwatch
 dist/

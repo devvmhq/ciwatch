@@ -31,8 +31,24 @@ nodes:
     model: opus
     allowed_tools: [Read, Grep, Glob]
 
-  - id: lane-design-approval
+  # The design on disk, for the inference check now and the spec later.
+  # Archon substitutes node outputs into bash already shell-quoted.
+  - id: design-file
     depends_on: [design]
+    bash: |
+      design=$design.output
+      printf '%s\n' "$design" > "$ARTIFACTS_DIR/design.md"
+
+  # The design's Inference section, for the top of the approval message: a
+  # design that infers from timing or formats always needs the human.
+  - id: design-check
+    depends_on: [design-file]
+    script: factory
+    runtime: bun
+    with: { step: design-check, task: $INPUTS.task, lane: "" }
+
+  - id: lane-design-approval
+    depends_on: [design-check]
     script: factory
     runtime: bun
     with: { step: lane, task: $INPUTS.task, lane: design-approval }
@@ -43,9 +59,11 @@ nodes:
       form: approval
       attention: |
         Design for dex task $INPUTS.task. Its acceptance cases and non-goals
-        are the spec the change is built and reviewed against. Approve to start
-        building (your comment is passed to the builder and recorded with the
-        spec), or reject with a reason.
+        mark the approved feature's path, which the change is built and
+        reviewed against. Approve to start building (your comment is passed
+        to the builder and recorded with the spec), or reject with a reason.
+
+        $design-check.output
 
         $design.output
 
@@ -62,14 +80,11 @@ nodes:
     runtime: bun
     with: { step: lane, task: $INPUTS.task, lane: build }
 
-  # The approved spec: the design and the approval comment, kept for the tests
-  # commit. Archon substitutes node outputs into bash already shell-quoted.
+  # The approval comment, kept with the design for the tests commit's spec.
   - id: spec
     depends_on: [lane-build]
     bash: |
-      design=$design.output
       approval=$approve-design.output.text
-      printf '%s\n' "$design" > "$ARTIFACTS_DIR/design.md"
       printf '%s\n' "$approval" > "$ARTIFACTS_DIR/approval.txt"
 
   - id: spec-check
@@ -123,15 +138,15 @@ nodes:
 
   # Lane: review. A fresh reviewer each round, without write tools, holds the
   # change to the spec; a fixer fixes its blockers and majors, and the round is
-  # committed with both. The loop ends when the reviewer ships, or early when
-  # the majors come from the previous round's fix (churn). Reaching the cap
-  # fails the run for a human to judge.
+  # committed with both. The loop ends when the reviewer ships, or early when a
+  # script finds the majors on lines the previous round's fix changed (churn).
+  # Reaching the cap fails the run for a human to judge.
   - id: review-loop
     depends_on: [commit-self-review]
     loop_group:
       max_iterations: 3
       fresh_context: true
-      until_bash: 'ship=$review.output.ship; churn=$review.output.churn; [ "$ship" = true ] || [ "$churn" = true ]'
+      until_bash: 'ship=$review.output.ship; churn=$churn-check.output.churn; [ "$ship" = true ] || [ "$churn" = true ]'
       nodes:
         - id: diff
           script: factory
@@ -153,7 +168,6 @@ nodes:
             type: object
             properties:
               ship: { type: boolean }
-              churn: { type: boolean }
               summary: { type: string }
               findings:
                 type: array
@@ -165,16 +179,28 @@ nodes:
                     severity: { type: string, enum: [blocker, major, minor] }
                     problem: { type: string }
                     fix: { type: string }
-                    from_previous_fix: { type: boolean }
-                  required: [file, severity, problem, fix, from_previous_fix]
+                  required: [file, severity, problem, fix]
               backlog:
                 type: array
-                items: { type: string }
-            required: [ship, churn, summary, findings, backlog]
+                items:
+                  type: object
+                  properties:
+                    note: { type: string }
+                    why_off_path: { type: string }
+                  required: [note, why_off_path]
+            required: [ship, summary, findings, backlog]
+
+        # Churn, decided by code: a blocker or major on lines the previous
+        # round's fix changed. Prints the verdict with churn added.
+        - id: churn-check
+          depends_on: [review]
+          script: churn
+          runtime: bun
+          with: { review: $review.output }
 
         - id: fix
-          depends_on: [review]
-          when: "$review.output.ship != true && $review.output.churn != true"
+          depends_on: [churn-check]
+          when: "$review.output.ship != true && $churn-check.output.churn != true"
           command: factory-fix-findings
 
         - id: commit-review
@@ -184,14 +210,14 @@ nodes:
           with: { step: checkpoint-review, task: $INPUTS.task, lane: "" }
 
         # The group's output is its terminal nodes' output, and the fix and its
-        # commit are skipped when the reviewer ships or calls churn, so this
-        # node always gives the verdict. Archon substitutes $review.output into
-        # bash already shell-quoted.
+        # commit are skipped when the reviewer ships or churn stops the loop, so
+        # this node always gives the verdict, churn included. Archon
+        # substitutes node outputs into bash already shell-quoted.
         - id: verdict
-          depends_on: [review, commit-review]
+          depends_on: [churn-check, commit-review]
           trigger_rule: none_failed_min_one_success
           bash: |
-            verdict=$review.output
+            verdict=$churn-check.output
             printf '%s\n' "$verdict"
 
   # Churn: the fixes went in circles, so ask for a design change instead of
@@ -221,7 +247,7 @@ nodes:
   # Runs after the loop, or after an approved redesign stop; a rejected one
   # cancels the run first.
   - id: lane-polish
-    depends_on: [review-loop, redesign]
+    depends_on: [review-loop, redesign, redesign-rejected]
     trigger_rule: none_failed_min_one_success
     script: factory
     runtime: bun
@@ -262,9 +288,16 @@ nodes:
     command: factory-commit-message
     allowed_tools: [Read, Grep, Glob, Write]
 
+  # The review's backlog, numbered with a recommendation each, for the human
+  # to pick tasks from at the final review (triage.json in the artifacts).
+  - id: triage
+    depends_on: [commit-message]
+    command: factory-triage
+    allowed_tools: [Read, Grep, Glob, Write]
+
   # Lane: human-review.
   - id: summary
-    depends_on: [commit-message]
+    depends_on: [triage]
     script: factory
     runtime: bun
     with: { step: summary, task: $INPUTS.task, lane: human-review }
@@ -277,8 +310,12 @@ nodes:
         Dex task $INPUTS.task passed review, polish and the gate, and is ready
         for your review. Approve to land its branch on local main with a merge
         commit (nothing is pushed), or reject with a reason to stop here and
-        keep the worktree and its branch. To have the minor findings or the
-        backlog notes become a fix task, say so in your comment.
+        keep the worktree and its branch. To turn backlog notes into dex
+        tasks, add a line `tasks: 1,3` (or `tasks: all`) to your comment.
+
+        Backlog, triaged:
+
+        $triage.output
 
         Merge commit message:
 
@@ -301,3 +338,10 @@ nodes:
     script: factory
     runtime: bun
     with: { step: land, task: $INPUTS.task, lane: "" }
+
+  # The backlog notes the human picked with `tasks: …`, as dex tasks.
+  - id: backlog-tasks
+    depends_on: [land]
+    script: backlog
+    runtime: bun
+    with: { comment: $approve-final.output.text }

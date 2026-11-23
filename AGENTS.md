@@ -15,6 +15,7 @@ ciwatch watches every GitHub Actions run for a commit until it finishes, and sho
 | `testdata/golden/` | the exact `--json` output for a fixture; changing the output means updating it in the same commit |
 | `docs/` | `json.md`: the `--json` schema and the exit codes; tests hold the encoder to it |
 | `mise.toml`, `.golangci.yml` | pinned tools, tasks and linters |
+| `.claude/settings.json`, `.mise/locks/` | the factory's write-blocking hook (shell writes into files are refused; use the editor tools), and mise's npm lock for dex, committed with `mise.lock` |
 | `.archon/` | Archon's settings and the vendored factory pack (`workflows/archon-factory`, from devvmhq/archon-factory), which builds each dex task; never edit the pack here, upgrade it |
 
 ## Tasks

@@ -6,10 +6,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # bun test skips dot folders unless it's given the file.
-bun test ./.shared/factory.test.ts
+bun test ./.shared/factory.test.ts ./.shared/shellwrites.test.ts
 
 status=0
-for f in scripts/factory.ts commands/factory-adversarial-review.md commands/factory-fix-findings.md commands/factory-commit-message.md commands/factory-polish.md; do
+for f in scripts/factory.ts scripts/churn.ts scripts/backlog.ts commands/factory-adversarial-review.md commands/factory-fix-findings.md commands/factory-commit-message.md commands/factory-polish.md commands/factory-triage.md; do
   for w in fix review; do
     if ! cmp -s "feature/$f" "$w/$f"; then
       echo "check: feature/$f and $w/$f differ; they must be copies" >&2

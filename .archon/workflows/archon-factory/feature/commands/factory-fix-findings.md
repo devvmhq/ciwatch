@@ -7,7 +7,7 @@ An adversarial reviewer did not ship this change. Their verdict and findings:
 
 $review.output
 
-Read AGENTS.md, then fix every blocker and major finding. Leave the minor findings, which a polish step handles once the reviewer ships, and don't act on the backlog notes, which are for future tasks. Keep each fix to what the finding needs: don't widen the change beyond the approved spec. For a bug, write a test that fails because of it first, see it fail, then fix it. Edit files with the editor tools, not `sed`, `perl`, `python` or heredocs. If you think a finding is wrong, don't change the code for it; explain why in the commit message so the next reviewer sees it.
+Read AGENTS.md, then fix every blocker and major finding. Leave the minor findings, which a polish step handles once the reviewer ships, and don't act on the backlog notes, which are for future tasks. Keep each fix to what the finding needs: don't widen the change beyond the approved spec. For a bug, write a test that fails because of it first, see it fail, then fix it. Create and edit every file with the editor tools (Write, Edit), throwaway files included, never from the shell (`cat >`, `echo >`, `tee`, heredocs, `sed -i`, `perl`, `python`); a hook blocks those. Never generate a golden file or fixture by running the code under test, and never read a recorded log whole: grep it or read the lines you need. If you think a finding is wrong, don't change the code for it; explain why in the commit message so the next reviewer sees it.
 
 Run `mise run fmt`, `mise run lint` and `mise run test` and leave them passing. Don't run `git commit`; the workflow commits this review round on the run's branch, even if you changed nothing, so the review stays in the history.
 

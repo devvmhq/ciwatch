@@ -29,7 +29,7 @@ nodes:
     loop_group:
       max_iterations: 3
       fresh_context: true
-      until_bash: 'ship=$review.output.ship; churn=$review.output.churn; [ "$ship" = true ] || [ "$churn" = true ]'
+      until_bash: 'ship=$review.output.ship; churn=$churn-check.output.churn; [ "$ship" = true ] || [ "$churn" = true ]'
       nodes:
         - id: diff
           script: factory
@@ -51,7 +51,6 @@ nodes:
             type: object
             properties:
               ship: { type: boolean }
-              churn: { type: boolean }
               summary: { type: string }
               findings:
                 type: array
@@ -63,16 +62,28 @@ nodes:
                     severity: { type: string, enum: [blocker, major, minor] }
                     problem: { type: string }
                     fix: { type: string }
-                    from_previous_fix: { type: boolean }
-                  required: [file, severity, problem, fix, from_previous_fix]
+                  required: [file, severity, problem, fix]
               backlog:
                 type: array
-                items: { type: string }
-            required: [ship, churn, summary, findings, backlog]
+                items:
+                  type: object
+                  properties:
+                    note: { type: string }
+                    why_off_path: { type: string }
+                  required: [note, why_off_path]
+            required: [ship, summary, findings, backlog]
+
+        # Churn, decided by code: a blocker or major on lines the previous
+        # round's fix changed. Prints the verdict with churn added.
+        - id: churn-check
+          depends_on: [review]
+          script: churn
+          runtime: bun
+          with: { review: $review.output }
 
         - id: fix
-          depends_on: [review]
-          when: "$review.output.ship != true && $review.output.churn != true"
+          depends_on: [churn-check]
+          when: "$review.output.ship != true && $churn-check.output.churn != true"
           command: factory-fix-findings
 
         - id: commit-review
@@ -86,10 +97,10 @@ nodes:
         # node always gives the verdict. Archon substitutes $review.output into
         # bash already shell-quoted.
         - id: verdict
-          depends_on: [review, commit-review]
+          depends_on: [churn-check, commit-review]
           trigger_rule: none_failed_min_one_success
           bash: |
-            verdict=$review.output
+            verdict=$churn-check.output
             printf '%s\n' "$verdict"
 
   # Churn: ask for a design change instead of another round.
@@ -116,7 +127,7 @@ nodes:
   # Lane: polish. Runs after the loop, or after an approved stop; a rejected
   # one cancels the run first.
   - id: lane-polish
-    depends_on: [review-loop, redesign]
+    depends_on: [review-loop, redesign, redesign-rejected]
     trigger_rule: none_failed_min_one_success
     script: factory
     runtime: bun
@@ -157,9 +168,16 @@ nodes:
     command: factory-commit-message
     allowed_tools: [Read, Grep, Glob, Write]
 
+  # The review's backlog, numbered with a recommendation each, for the human
+  # to pick tasks from at the final review (triage.json in the artifacts).
+  - id: triage
+    depends_on: [commit-message]
+    command: factory-triage
+    allowed_tools: [Read, Grep, Glob, Write]
+
   # Lane: human-review.
   - id: summary
-    depends_on: [commit-message]
+    depends_on: [triage]
     script: factory
     runtime: bun
     with: { step: summary, task: $INPUTS.task, lane: human-review }
@@ -172,7 +190,12 @@ nodes:
         Dex task $INPUTS.task passed its continued review, polish and the gate,
         and is ready for your review. Approve to land its branch on local main
         with a merge commit (nothing is pushed), or reject with a reason to stop
-        here and keep the worktree and its branch.
+        here and keep the worktree and its branch. To turn backlog notes into
+        dex tasks, add a line `tasks: 1,3` (or `tasks: all`) to your comment.
+
+        Backlog, triaged:
+
+        $triage.output
 
         Merge commit message:
 
@@ -195,3 +218,10 @@ nodes:
     script: factory
     runtime: bun
     with: { step: land, task: $INPUTS.task, lane: "" }
+
+  # The backlog notes the human picked with `tasks: …`, as dex tasks.
+  - id: backlog-tasks
+    depends_on: [land]
+    script: backlog
+    runtime: bun
+    with: { comment: $approve-final.output.text }

@@ -24,7 +24,7 @@ $polish.output
 Read AGENTS.md's rules for commits and follow them. Unless it says otherwise, use Conventional Commits: a `type(scope): summary` line under 72 characters for the change as a whole, a blank line, then a body in plain, joined sentences saying what changed and why, wrapped at 72 characters. Then, only when there's something to list:
 
 - a paragraph headed `Left from review:` listing each minor finding the polish step left, in a line or two with its file;
-- a paragraph headed `Backlog:` listing the review's backlog notes, one line each, as possible future tasks.
+- a paragraph headed `Backlog:` listing the review's backlog notes, each in a line or two with why it's off the feature's path (its `why_off_path`), as possible future tasks.
 
 Never put a task ID from dex or any other tracker in the message.
 

@@ -107,20 +107,29 @@ async function diff(artifacts: string, options: string[] = []): Promise<string> 
 }
 
 // What a prompt's diff leaves out. Recorded fixtures (a gh run view recording
-// is a 120 KB line of JSON) would otherwise be read again by every reviewer,
-// fixer and message writer, and they dominated a run's tokens. Code, tests
-// included, has short lines and stays in unless its diff is huge.
+// is a 120 KB line of JSON, a CI log thousands of lines) would otherwise be
+// read again by every reviewer, fixer and message writer, and they dominated a
+// run's tokens. Code, tests included, has short lines and stays in unless its
+// diff is huge.
 export const promptDiffLimits = { longestLine: 2000, fileBytes: 64000 };
 
-// A diff for a prompt: each file's part as it is, except a part that looks like
-// data (a line longer than longestLine) or is over fileBytes, which becomes a
-// line naming the file, so the agent can read it if it matters.
+// Recorded data, named rather than shown whatever its size: anything under a
+// testdata/ folder, and any .log file.
+export function isRecordedData(path: string): boolean {
+  return /(^|\/)testdata\//.test(path) || /\.log$/.test(path);
+}
+
+// A diff for a prompt: each file's part as it is, except recorded data and a
+// part that looks like data (a line longer than longestLine) or is over
+// fileBytes, which become a line naming the file, so the agent can read the
+// part it needs if it matters.
 export function trimDiff(diff: string, limits = promptDiffLimits): string {
   const kept: string[] = [];
   const omitted: string[] = [];
   for (const part of diff.split(/^(?=diff --git )/m).filter((p) => p.trim() !== "")) {
     const longest = Math.max(...part.split("\n").map((l) => l.length));
-    if (longest <= limits.longestLine && part.length <= limits.fileBytes) {
+    const file = /^diff --git a\/(.*?) b\//.exec(part)?.[1] ?? "";
+    if (!isRecordedData(file) && longest <= limits.longestLine && part.length <= limits.fileBytes) {
       kept.push(part.trimEnd());
       continue;
     }
@@ -129,7 +138,7 @@ export function trimDiff(diff: string, limits = promptDiffLimits): string {
   }
   if (omitted.length > 0) {
     kept.push(
-      `Not shown here, because each file's diff is data (a line over ${limits.longestLine} characters) or over ${limits.fileBytes} bytes; read the file if it matters:\n${omitted.join("\n")}`,
+      `Not shown here, because each is recorded data (under testdata/, a .log, a line over ${limits.longestLine} characters) or a diff over ${limits.fileBytes} bytes. If one matters, grep it or read the lines you need; don't read it whole:\n${omitted.join("\n")}`,
     );
   }
   return kept.join("\n");
@@ -198,6 +207,12 @@ export async function checkpoint(artifacts: string, stage: string): Promise<stri
   }
   await $`git commit --quiet --allow-empty --file ${file}`.quiet();
   await rm(file); // so a later round can't reuse it
+  if (stage === "review") {
+    // The churn check compares the next round's majors with what this fix changed.
+    const sha = await git(["rev-parse", "HEAD"]);
+    const log = join(artifacts, "review-commits");
+    await writeFile(log, (existsSync(log) ? await readFile(log, "utf8") : "") + sha + "\n");
+  }
   return (await $`git log -1 ${"--format=%h %s"}`.quiet().text()).trim();
 }
 
@@ -227,6 +242,96 @@ async function land(a: Args): Promise<void> {
   console.log(sha);
 }
 
+// The line ranges a commit changed, per file, from `git diff --unified=0`'s hunk
+// headers: the new side's lines, or the line a deletion happened at.
+export function changedRanges(unifiedZeroDiff: string): Map<string, [number, number][]> {
+  const ranges = new Map<string, [number, number][]>();
+  let file = "";
+  for (const line of unifiedZeroDiff.split("\n")) {
+    const f = /^\+\+\+ b\/(.*)$/.exec(line);
+    if (f) {
+      file = f[1];
+      continue;
+    }
+    const h = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+    if (h && file !== "") {
+      const start = Number(h[1]);
+      const count = h[2] === undefined ? 1 : Number(h[2]);
+      const list = ranges.get(file) ?? [];
+      list.push([start, start + Math.max(count, 1) - 1]);
+      ranges.set(file, list);
+    }
+  }
+  return ranges;
+}
+
+type Finding = { file: string; line?: number; severity: string; problem?: string };
+
+// Churn, decided by the code, not by the reviewer: a blocker or major whose
+// file and line fall within `slack` lines of what the previous round's fix
+// changed. Findings without a line can't be placed, so they never count.
+export function churnFindings(findings: Finding[], previousFix: Map<string, [number, number][]>, slack = 3): Finding[] {
+  return findings.filter((f) => {
+    if (f.severity === "minor" || f.line === undefined) return false;
+    return (previousFix.get(f.file) ?? []).some(([a, b]) => f.line! >= a - slack && f.line! <= b + slack);
+  });
+}
+
+// The review's verdict with the churn decision added, for the loop's until
+// check, the fixer's when, the redesign gate and the prompts that read it.
+export async function churnCheck(artifacts: string, reviewJSON: string): Promise<string> {
+  const review = JSON.parse(reviewJSON) as { findings?: Finding[] };
+  const log = join(artifacts, "review-commits");
+  const commits = existsSync(log) ? (await readFile(log, "utf8")).split("\n").filter(Boolean) : [];
+  let churn: Finding[] = [];
+  if (commits.length > 0) {
+    const last = commits[commits.length - 1];
+    const fixDiff = await git(["diff", "--unified=0", `${last}^`, last]);
+    churn = churnFindings(review.findings ?? [], changedRanges(fixDiff));
+  }
+  return JSON.stringify({ ...review, churn: churn.length > 0, churn_findings: churn });
+}
+
+// Creates the dex tasks the human picked at the final review, from the triage
+// step's numbered backlog. The pick is a line `tasks: 1,3` (or `tasks: all`) in
+// the approval comment; without one, nothing is created.
+export function pickedTasks(comment: string, count: number): number[] {
+  const m = /^\s*tasks:\s*(.+)$/im.exec(comment);
+  if (!m) return [];
+  const pick = m[1].trim().toLowerCase();
+  if (pick === "all") return Array.from({ length: count }, (_, i) => i + 1);
+  if (pick === "none") return [];
+  const out = new Set<number>();
+  for (const part of pick.split(/[,\s]+/).filter(Boolean)) {
+    const n = Number(part);
+    if (!Number.isInteger(n) || n < 1 || n > count) throw new Error(`tasks: '${part}' isn't one of the backlog's numbers (1-${count})`);
+    out.add(n);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+type TriageItem = { n: number; note: string; recommendation: string; task_name: string; task_description: string };
+
+export async function backlogTasks(comment: string, artifacts: string): Promise<string> {
+  const file = join(artifacts, "triage.json");
+  if (!existsSync(file)) {
+    if (pickedTasks(comment, 0).length === 0) return "no backlog tasks picked";
+    throw new Error(`tasks were picked, but the triage step wrote no ${file}`);
+  }
+  const items = ((JSON.parse(await readFile(file, "utf8")) as { items?: TriageItem[] }).items ?? []).sort((a, b) => a.n - b.n);
+  for (const [i, item] of items.entries()) {
+    if (item.n !== i + 1 || !item.task_name || !item.task_description) throw new Error(`triage.json's item ${i + 1} is malformed`);
+  }
+  const picks = pickedTasks(comment, items.length);
+  const made: string[] = [];
+  for (const n of picks) {
+    const item = items[n - 1];
+    await dex(["create", item.task_name, "--description", `${item.task_description}\n\nFrom the review backlog: ${item.note}`]);
+    made.push(`${n}: ${item.task_name}`);
+  }
+  return made.length === 0 ? "no backlog tasks picked" : `created dex tasks:\n${made.join("\n")}`;
+}
+
 // A commit message with a paragraph added at the end of its body, before its
 // trailers (Co-Authored-By and the like), if it has any.
 export function beforeTrailers(message: string, paragraph: string): string {
@@ -239,24 +344,56 @@ export function beforeTrailers(message: string, paragraph: string): string {
   return `${out.join("\n\n")}\n`;
 }
 
-// The message for a task's squashed commit: the merge's message, with the
-// subjects of the stacked commits that built it listed before its trailers.
-export function squashMessage(merge: string, steps: string[]): string {
-  return beforeTrailers(merge, steps.length > 0 ? `Built in steps:\n${steps.map((s) => `- ${s}`).join("\n")}` : "");
+// The "Spec: …" paragraphs a tests commit records (see extractSpec), from a
+// commit message, so a squash can carry them on.
+export function specParagraphs(message: string): string[] {
+  return message
+    .trim()
+    .split(/\n{2,}/)
+    .filter((p) => p.startsWith("Spec: "));
 }
 
-// The spec a design was approved with: its "## Acceptance cases" and
-// "## Non-goals" sections, and the approver's comment. It goes into the tests
-// commit, so every later step and an adopted review run read the same spec.
+// The message for a task's squashed commit: the merge's message, then the
+// approved spec its tests commit recorded, then the subjects of the stacked
+// commits that built it, before its trailers. The spec reaches the pushed
+// history this way.
+export function squashMessage(merge: string, steps: string[], spec: string[] = []): string {
+  const parts = [...spec];
+  if (steps.length > 0) parts.push(`Built in steps:\n${steps.map((s) => `- ${s}`).join("\n")}`);
+  return beforeTrailers(merge, parts.join("\n\n"));
+}
+
+// A design's "## <heading>" section, or "" when it has none.
+export function designSection(design: string, heading: string): string {
+  const m = new RegExp(`^##\\s+${heading}\\s*$([\\s\\S]*?)(?=^##\\s|(?![\\s\\S]))`, "mi").exec(design);
+  return m ? m[1].trim() : "";
+}
+
+// The design's "## Inference" section for the top of the approval message:
+// what the design infers from timing or formats, which the human always judges.
+export function inferenceNote(design: string): string {
+  const inference = designSection(design, "Inference");
+  if (inference === "") return "Inference: the design has no \"## Inference\" section; read it for timing or format guesses before approving.";
+  // "none", however the design formats it: `none`, **None.**, - none.
+  if (/^none$/i.test(inference.replace(/[`*_.\-\s]/g, ""))) return "Inference: none.";
+  return `Inference: THIS DESIGN INFERS FROM TIMING OR FORMATS. It needs your own judgement:\n${inference}`;
+}
+
+// The spec a design was approved with: its "## Acceptance cases", "## Non-goals"
+// and "## Inference" sections, and the approver's comment. It goes into the
+// tests commit, so every later step and an adopted review run read the same
+// spec, and the squash carries it to the pushed history.
 export function extractSpec(design: string, approval: string): string {
-  const section = (heading: string): string => {
-    const m = new RegExp(`^##\\s+${heading}\\s*$([\\s\\S]*?)(?=^##\\s|(?![\\s\\S]))`, "mi").exec(design);
-    return m ? m[1].trim() : "";
-  };
-  const cases = section("Acceptance cases");
-  const nonGoals = section("Non-goals");
+  // Each section becomes one paragraph (blank lines inside it dropped), so a
+  // squash, which keeps whole "Spec: …" paragraphs, carries all of it.
+  const tight = (s: string) => s.replace(/\n\s*\n/g, "\n");
+  const cases = tight(designSection(design, "Acceptance cases"));
+  const nonGoals = tight(designSection(design, "Non-goals"));
+  const inference = tight(designSection(design, "Inference"));
+  approval = tight(approval);
   if (cases === "") throw new Error('the approved design has no "## Acceptance cases" section');
   const parts = [`Spec: acceptance cases\n${cases}`, `Spec: non-goals\n${nonGoals === "" ? "(none stated)" : nonGoals}`];
+  if (inference !== "") parts.push(`Spec: inference\n${inference}`);
   if (approval.trim() !== "") parts.push(`Spec: approved with\n${approval.trim()}`);
   return parts.join("\n\n");
 }
@@ -295,7 +432,9 @@ export async function squash(upstream: string): Promise<void> {
       let message = await $`git log -1 ${"--format=%B"} ${c}`.quiet().text();
       if (parents.length > 1) {
         const steps = (await git(["log", "--reverse", "--format=%s", `${parents[0]}..${parents[1]}`])).split("\n").filter(Boolean);
-        message = squashMessage(message, steps);
+        const bodies = await $`git log --reverse ${"--format=%B%x00"} ${`${parents[0]}..${parents[1]}`}`.quiet().text();
+        const spec = bodies.split("\0").flatMap(specParagraphs);
+        message = squashMessage(message, steps, spec);
       }
       const file = join(tmp, "message");
       await writeFile(file, message);
@@ -351,6 +490,11 @@ export async function step(name: string, a: Args): Promise<void> {
       return;
     case "history":
       console.log(await history(a.artifacts));
+      return;
+    case "design-check":
+      // Before approval: the design's Inference section, for the top of the
+      // approval message.
+      console.log(inferenceNote(await readFile(join(a.artifacts, "design.md"), "utf8")));
       return;
     case "spec-check": {
       // Fails the run before any building if the approved design has no

@@ -5,7 +5,112 @@ import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { checkpoint, extractSpec, isTestPath, setLane, squash, squashMessage, trimDiff } from "./factory.ts";
+import {
+  changedRanges,
+  checkpoint,
+  churnFindings,
+  extractSpec,
+  inferenceNote,
+  isRecordedData,
+  isTestPath,
+  pickedTasks,
+  setLane,
+  specParagraphs,
+  squash,
+  squashMessage,
+  trimDiff,
+} from "./factory.ts";
+
+describe("churn", () => {
+  const diff = [
+    "diff --git a/internal/cli/cli.go b/internal/cli/cli.go",
+    "--- a/internal/cli/cli.go",
+    "+++ b/internal/cli/cli.go",
+    "@@ -40,2 +40,5 @@ func x() {",
+    "+a",
+    "@@ -90 +93 @@",
+    "-b",
+    "+c",
+    "diff --git a/README.md b/README.md",
+    "--- a/README.md",
+    "+++ b/README.md",
+    "@@ -10,3 +9,0 @@",
+  ].join("\n");
+
+  test("changedRanges reads the new side of each hunk", () => {
+    expect(changedRanges(diff)).toEqual(
+      new Map([
+        ["internal/cli/cli.go", [[40, 44], [93, 93]]],
+        ["README.md", [[9, 9]]],
+      ]),
+    );
+  });
+
+  test("a major on or near the previous fix's lines is churn; minors and unplaced findings aren't", () => {
+    const ranges = changedRanges(diff);
+    const findings = [
+      { file: "internal/cli/cli.go", line: 46, severity: "major" },
+      { file: "internal/cli/cli.go", line: 60, severity: "major" },
+      { file: "internal/cli/cli.go", line: 42, severity: "minor" },
+      { file: "internal/cli/cli.go", severity: "blocker" },
+      { file: "README.md", line: 7, severity: "blocker" },
+    ];
+    expect(churnFindings(findings, ranges).map((f) => `${f.file}:${f.line}`)).toEqual(["internal/cli/cli.go:46", "README.md:7"]);
+  });
+});
+
+describe("pickedTasks", () => {
+  test("reads a tasks line from the approval comment", () => {
+    expect(pickedTasks("Land it.\ntasks: 3, 1\nthanks", 4)).toEqual([1, 3]);
+    expect(pickedTasks("tasks: all", 3)).toEqual([1, 2, 3]);
+    expect(pickedTasks("Tasks: none", 3)).toEqual([]);
+    expect(pickedTasks("Land it.", 3)).toEqual([]);
+  });
+
+  test("refuses a number that isn't in the backlog", () => {
+    expect(() => pickedTasks("tasks: 4", 3)).toThrow("isn't one of the backlog's numbers");
+  });
+});
+
+describe("inferenceNote", () => {
+  test("says none, flags an inference, or flags a missing section", () => {
+    expect(inferenceNote("## Inference\nnone\n")).toBe("Inference: none.");
+    expect(inferenceNote("## Inference\n\n`none`\n\n## Behaviour\nx")).toBe("Inference: none.");
+    expect(inferenceNote("## Inference\n**None.**\n")).toBe("Inference: none.");
+    expect(inferenceNote("## Inference\n- none\n")).toBe("Inference: none.");
+    expect(inferenceNote("## Inference\n- Steps are cut by timestamps.\n")).toContain("THIS DESIGN INFERS");
+    expect(inferenceNote("## Acceptance cases\nAC-1: x\n")).toContain("has no \"## Inference\" section");
+  });
+});
+
+describe("spec in squashes", () => {
+  test("specParagraphs takes only the Spec paragraphs", () => {
+    expect(specParagraphs("test(a): x\n\nBody.\n\nSpec: acceptance cases\nAC-1: y\n\nSpec: non-goals\n- z\n\nCo-Authored-By: S <s@e>")).toEqual([
+      "Spec: acceptance cases\nAC-1: y",
+      "Spec: non-goals\n- z",
+    ]);
+  });
+
+  test("squashMessage puts the spec before the steps and the trailers", () => {
+    expect(squashMessage("feat: a\n\nWhy.\n\nCo-Authored-By: S <s@e>\n", ["t", "f"], ["Spec: acceptance cases\nAC-1: y"])).toBe(
+      "feat: a\n\nWhy.\n\nSpec: acceptance cases\nAC-1: y\n\nBuilt in steps:\n- t\n- f\n\nCo-Authored-By: S <s@e>\n",
+    );
+  });
+});
+
+describe("isRecordedData", () => {
+  test("names testdata and logs as recorded data", () => {
+    expect(isRecordedData("testdata/logs/run.log")).toBe(true);
+    expect(isRecordedData("internal/x/testdata/fuzz/F/abc")).toBe(true);
+    expect(isRecordedData("build.log")).toBe(true);
+    expect(isRecordedData("internal/cli/cli_test.go")).toBe(false);
+  });
+
+  test("trimDiff names a small testdata file instead of showing it", () => {
+    const part = "diff --git a/testdata/x.json b/testdata/x.json\n--- a/testdata/x.json\n+++ b/testdata/x.json\n@@ -0,0 +1 @@\n+{}\n";
+    expect(trimDiff(part)).toContain("- testdata/x.json (");
+  });
+});
 
 describe("extractSpec", () => {
   const design = [
@@ -33,6 +138,13 @@ describe("extractSpec", () => {
         "Spec: approved with\nApproved; use exit 4 for X.",
       ].join("\n\n"),
     );
+  });
+
+  test("keeps each section one paragraph, so a squash carries all of it", () => {
+    const spaced = "## Acceptance cases\n\nAC-1: a\n\nAC-2: b\n\n## Non-goals\n\n- c\n\n- d\n";
+    const spec = extractSpec(spaced, "Approved.\n\nWith a note.");
+    expect(spec).toBe("Spec: acceptance cases\nAC-1: a\nAC-2: b\n\nSpec: non-goals\n- c\n- d\n\nSpec: approved with\nApproved.\nWith a note.");
+    expect(specParagraphs(`test: x\n\n${spec}\n\nCo-Authored-By: S <s@e>`).join("\n\n")).toBe(spec);
   });
 
   test("reads a section that ends the design", () => {
@@ -87,7 +199,7 @@ describe("trimDiff", () => {
     expect(got).toContain("+package b");
     expect(got).not.toContain("xxxx");
     expect(got).toContain(`- testdata/run.json (${data.length} bytes of diff)`);
-    expect(got).toContain("read the file if it matters");
+    expect(got).toContain("grep it or read the lines you need");
   });
 
   test("names a file whose diff is over the byte limit, even with short lines", () => {
@@ -208,6 +320,21 @@ describe("squash", () => {
     expect(one).toBe("feat: one\n\nBuilt in steps:\n- step a.txt\n- step b.txt\n\nCo-Authored-By: Someone <s@example.com>");
     expect((await $`git for-each-ref ${"--format=%(refname)"} refs/factory/pre-squash/`.quiet().text()).trim()).toMatch(/^refs\/factory\/pre-squash\/main-/);
     expect((await $`git log -1 ${"--format=%s"} one`.quiet().text()).trim()).toBe("step b.txt");
+  });
+
+  test("carries the tests commit's spec into the squashed commit", async () => {
+    await repo();
+    await $`git update-ref refs/remotes/origin/main HEAD`.quiet();
+    await $`git checkout --quiet -b specced`.quiet();
+    await writeFile("a_test.go", "package a\n");
+    await $`git add --all && git commit --quiet -m ${"test(a): fail"} -m ${"Spec: acceptance cases\nAC-1: a"} -m ${"Spec: non-goals\n- b"}`.quiet();
+    await writeFile("a.go", "package a\n\nfunc A() {}\n");
+    await $`git add --all && git commit --quiet -m ${"feat(a): add A"}`.quiet();
+    await $`git checkout --quiet main && git merge --quiet --no-ff -m ${"feat(a): add A\n\nCo-Authored-By: S <s@e>"} specced`.quiet();
+    await squash("origin/main");
+    expect((await $`git log -1 ${"--format=%B"}`.quiet().text()).trim()).toBe(
+      "feat(a): add A\n\nSpec: acceptance cases\nAC-1: a\n\nSpec: non-goals\n- b\n\nBuilt in steps:\n- test(a): fail\n- feat(a): add A\n\nCo-Authored-By: S <s@e>",
+    );
   });
 
   test("refuses a checkout with uncommitted changes", async () => {

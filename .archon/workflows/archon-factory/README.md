@@ -6,15 +6,18 @@ An [Archon](https://archon.diy) workflow pack that takes one dex task from desig
 
 **`feature`** builds a feature in a worktree of its own:
 
-1. **Design** (Opus, read-only) from the dex task, with **acceptance cases** (`AC-1`, `AC-2`…: concrete inputs and their expected results) and **non-goals**, then a wait for your approval. Together they are the spec the change is built and reviewed against. A task that depends on guessing at open-ended input gets a first version that guesses at nothing, with the heuristic proposed as a separate, optional follow-up task. Your comment goes to the builder, and a rejection ends the run.
+1. **Design** (Opus, read-only) from the dex task, with **acceptance cases** (`AC-1`, `AC-2`…: concrete inputs and their expected results), **non-goals**, and an **Inference** section: `none`, or every place the behaviour rests on inferring from timing or a format. Then a wait for your approval, with the Inference section at the top of the message: a design that infers always needs your own judgement, even when you've delegated the other gates. The acceptance cases and non-goals mark the approved feature's path, which the change is built and reviewed against. A task that depends on guessing at open-ended input gets a first version that guesses at nothing, with the heuristic proposed as a separate, optional follow-up task. Your comment goes to the builder, and a rejection ends the run.
 2. **Tests first** (Sonnet): at least one test per acceptance case. A check then fails the run if no test file changed or if the suite already passes. The tests commit records the approved spec, so every later step, and a `review` run that adopts the branch, reads the same one.
 3. **Implement** and **self-review** (Sonnet), in the same session as the tests.
-4. **Adversarial review** (Opus, read-only), at most 3 rounds, bounded by the spec. A blocker or major is something that breaks an acceptance case or the spec; anything outside the spec, rarer inputs included, is a **backlog** note for a possible future task and never blocks. Each round, a fresh reviewer gets the diff and the branch's history, and a fixer (Sonnet) fixes its blockers and majors when it doesn't ship. If a round's majors come from the previous round's fix, the loop stops early (**churn**) and asks you: reject to stop and redesign, or approve to carry on with them open. A run that reaches the cap fails for you to judge.
+4. **Adversarial review** (Opus, read-only), at most 3 rounds. A **major** is any defect a user can hit on the approved feature's path (a hang, a crash, wrong or mixed output, lost data, a security problem), whether or not an acceptance case names that input. The **backlog** holds only what's off the path (inputs the non-goals name, style, test tightness, docs), each note saying why, and never blocks. Each round, a fresh reviewer gets the diff and the branch's history, and a fixer (Sonnet) fixes its blockers and majors when it doesn't ship. A script then compares the next round's majors with the lines the previous round's fix changed: if one lands on them, the loop stops early (**churn**) and asks you to reject and redesign, or approve and carry on with them open. A run that reaches the cap fails for you to judge.
 5. **Polish** (Sonnet): the review's minor findings, fixed inside the run and committed as their own step.
 6. **The gate:** `mise run fmt`, `mise run lint` and `mise run test`.
 7. **The merge message** (Sonnet), written from the whole change to the project's AGENTS.md rules, ending with the minor findings polish left (`Left from review:`) and the review's backlog notes (`Backlog:`).
-8. **Your review:** the diff's stat, the merge message and the last review, then a wait for your approval. A fix task for the leftovers or the backlog happens only if you ask for one.
-9. **Land:** the run's branch is merged into the main checkout's current branch with `git merge --no-ff`, and the dex task is completed with the merge commit. If the merge conflicts, it's aborted and the run says so, so you merge by hand.
+8. **Triage** (Sonnet): the backlog, numbered, each note with a recommendation (task, note or drop), a reason, and a ready dex task name and description.
+9. **Your review:** the triaged backlog, the diff's stat, the merge message and the last review, then a wait for your approval. To turn backlog notes into dex tasks, add a line `tasks: 1,3` (or `tasks: all`) to your approval comment; nothing else becomes a task.
+10. **Land:** the run's branch is merged into the main checkout's current branch with `git merge --no-ff`, the dex task is completed with the merge commit, and the backlog notes you picked become dex tasks. If the merge conflicts, it's aborted and the run says so, so you merge by hand.
+
+Recorded data (anything under `testdata/`, `.log` files) never goes into a prompt's diff: each step is told to grep it or read the lines it needs, never the whole file. Every step creates and edits files with the editor tools only, and golden files and fixtures come from real output, never from running the code under test; the hook below enforces the first.
 
 Along the way, each stage commits what it changed on the run's branch, with a message its AI step writes to AGENTS.md's rules:
 
@@ -55,6 +58,7 @@ The project then needs:
 - **`fmt`, `lint` and `test` tasks in `mise.toml`**, which make up the gate. The fail-first check counts Go `_test.go` files, `.test.`/`.spec.` files, Python `test_*.py` files and anything under `testdata/`, `test/`, `tests/` or `__tests__/` as tests.
 - **`AGENTS.md`** with the project's conventions, commits included. Every AI step reads it.
 - **`.dex/` and `.archon/.env` in `.gitignore`.**
+- **The write-blocking hook, in `.claude/settings.json`:** copy `hooks/settings.json`'s `hooks` block into it (and make sure `.gitignore` doesn't ignore that file). It's a Claude Code PreToolUse hook on Bash that runs `hooks/no-shell-writes.ts` from the vendored copy and blocks commands that write files from the shell (heredocs, redirects into files, `tee`, `sed -i`, `perl -i`), with one exception: a read-only `gh` command recording a fixture straight into `testdata/`. Archon's runs load the project's settings, so it covers every factory step, and it applies to anyone running Claude Code in the project. Archon's own YAML `hooks:` can only return a fixed response, so they can't look inside a command.
 
 Commit the copy, along with a line in `.archon/config.yaml` or the commit message saying which tag it came from, since `plugin copy` doesn't record it. To upgrade, run `archon plugin update devvmhq/archon-factory@<tag>`, delete the copy, copy it again, and review the diff.
 
@@ -88,7 +92,7 @@ Locally, each task lands as its stack and a merge commit, so you can review it s
 git log --oneline @{upstream}..                 # check it, then push
 ```
 
-Each task's merge commit since the upstream becomes one ordinary commit with the same files and the merge's message, with the stack's commit subjects listed under `Built in steps:` before the trailers. Other commits are kept as they are. The old head is saved under `refs/factory/pre-squash/`, each task's branch keeps its stack, and the dex tasks linked to the merges are relinked to the new commits. `squash` never pushes.
+Each task's merge commit since the upstream becomes one ordinary commit with the same files and the merge's message, followed by the approved spec its tests commit recorded (`Spec: acceptance cases`, `Spec: non-goals`, `Spec: inference`, `Spec: approved with`) and the stack's commit subjects under `Built in steps:`, before the trailers. So the pushed history keeps the spec each change was built against. Other commits are kept as they are. The old head is saved under `refs/factory/pre-squash/`, each task's branch keeps its stack, and the dex tasks linked to the merges are relinked to the new commits. `squash` never pushes.
 
 ## Leftovers
 
@@ -98,11 +102,12 @@ A finished run leaves its worktree under `~/.archon/workspaces/<project>/worktre
 
 | Path | What |
 | --- | --- |
-| `archon-plugin.json` | the pack's manifest: its name and its two entrypoints |
-| `feature/`, `fix/`, `review/` | each workflow's YAML, its prompts (`commands/`) and its script (`scripts/factory.ts`) |
-| `.shared/factory.ts` | the steps that aren't AI: dex, lanes, the fail-first check, the diff, the gate, each stage's commit and the landing merge |
+| `archon-plugin.json` | the pack's manifest: its name and its three entrypoints |
+| `feature/`, `fix/`, `review/` | each workflow's YAML, its prompts (`commands/`) and its scripts (`scripts/factory.ts`, `churn.ts`, `backlog.ts`) |
+| `.shared/factory.ts` | the steps that aren't AI: dex, lanes, the inference check, the fail-first check, the diff, the gate, each stage's commit, the churn check, the landing merge and the backlog tasks |
+| `.shared/shellwrites.ts`, `hooks/` | the write-blocking hook (`no-shell-writes.ts`) and the settings block that turns it on |
 | `bin/factory` | starts a run for a dex task |
 | `bin/squash` | squashes each task's stack before a push (`.shared/squash.ts`) |
 | `bin/check` | the pack's own check (`mise run check`): the tests, the copies, shellcheck and Archon's validation |
 
-A packaged workflow finds prompts and scripts only in its own folder, so `feature/`, `fix/` and `review/` each hold a copy of `scripts/factory.ts` and of the three prompts they share. `bin/check` fails when the copies differ.
+A packaged workflow finds prompts and scripts only in its own folder, so `feature/`, `fix/` and `review/` each hold a copy of the scripts and of the five prompts they share. `bin/check` fails when the copies differ.
