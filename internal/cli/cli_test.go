@@ -26,7 +26,7 @@ const sha = "3bb2dccd75a2754b8d45e522b3c26c22bc66a21a"
 // checkoutRoot is what the fake git prints for git rev-parse --show-toplevel.
 const checkoutRoot = "/repo"
 
-var ghArgs = []string{"run", "list", "--commit", sha, "--limit", "100", "--json", "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event"}
+var ghArgs = []string{"run", "list", "--commit", sha, "--limit", "100", "--json", "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event,attempt"}
 
 // counts is how many times the fake ran gh run list and gh run view, and for
 // which runs.
@@ -43,6 +43,9 @@ type counts struct {
 	artifactIDs []string   // the run ids of the gh api artifacts calls, in order
 	downloads   [][]string // the args of each gh run download call
 	opened      []string   // the roots the App opened as the checkout
+
+	reruns          []string // the run ids of the gh run rerun calls, in order
+	rerunAfterLists []int    // how many gh run list calls had been made at each of those
 }
 
 // testInterval and testGrace are what the fake helpers set on the App.
@@ -120,6 +123,7 @@ type fakeOpts struct {
 	checkout     fstest.MapFS      // the files of the checkout the App opens
 	downloadErr  map[string]error  // artifact name to the error gh run download fails with
 	toplevelErr  error             // the error git rev-parse --show-toplevel fails with
+	rerunErr     map[string]error  // run id to the error gh run rerun fails with
 
 	listFixtures []string      // gh run list prints these fixtures, one per call, the last repeated
 	listRaw      []string      // like listFixtures, but the output itself
@@ -205,6 +209,11 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 			default:
 				return readFixture(t, out), nil
 			}
+		case name == "gh" && len(args) == 4 && args[0] == "run" && args[1] == "rerun" && args[3] == "--failed":
+			c.reruns = append(c.reruns, args[2])
+			c.rerunAfterLists = append(c.rerunAfterLists, c.list)
+			c.events = append(c.events, "rerun")
+			return nil, opts.rerunErr[args[2]]
 		case name == "gh" && len(args) == 7 && args[0] == "run" && args[1] == "download":
 			c.downloads = append(c.downloads, args)
 			return nil, opts.downloadErr[args[4]]
@@ -610,7 +619,8 @@ func TestRunFullPageOfRunsMayBeTruncated(t *testing.T) {
 			if code := app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr); code != tt.want {
 				t.Errorf("exit code = %d, want %d (stderr %q)", code, tt.want, stderr.String())
 			}
-			if warned := stderr.Len() > 0; warned != tt.wantWarned {
+			// The rerun hint of a failed run is not the warning.
+			if warned := strings.Contains(stderr.String(), "can't vouch"); warned != tt.wantWarned {
 				t.Errorf("stderr = %q, want a warning = %v", stderr.String(), tt.wantWarned)
 			}
 		})

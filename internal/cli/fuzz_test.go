@@ -169,8 +169,9 @@ func TestFuzzCrashesInTableWithHint(t *testing.T) {
 	if !strings.HasSuffix(stdout, fuzzTable) {
 		t.Errorf("stdout = %q, want it to end with %q", stdout, fuzzTable)
 	}
-	if got := lastLine(stderr); got != fuzzFlagHint {
-		t.Errorf("last stderr line = %q, want %q", got, fuzzFlagHint)
+	// The rerun hint of the failed run comes after the crash hint.
+	if want := fuzzFlagHint + "\nciwatch: 1 run failed; to rerun its failed jobs: ciwatch --rerun-failed " + sha + "\n"; !strings.HasSuffix(stderr, want) {
+		t.Errorf("stderr = %q, want it to end with %q", stderr, want)
 	}
 	if len(calls.downloads) != 0 {
 		t.Errorf("downloads = %q, want none without --fetch-crashes", calls.downloads)
@@ -273,7 +274,7 @@ func TestUsageNamesFetchCrashes(t *testing.T) {
 	if code := app.Run(t.Context(), nil, &out, &errOut); code != cli.ExitUsage {
 		t.Fatalf("exit code = %d, want %d", code, cli.ExitUsage)
 	}
-	if want := "usage: ciwatch [--json] [--once] [--go-tests] [--fetch-crashes] <commit>\n"; !strings.HasPrefix(errOut.String(), want) {
+	if want := "usage: ciwatch [--json] [--once] [--go-tests] [--fetch-crashes] [--rerun-failed] <commit>\n"; !strings.HasPrefix(errOut.String(), want) {
 		t.Errorf("stderr = %q, want it to start with %q", errOut.String(), want)
 	}
 }

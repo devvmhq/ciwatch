@@ -24,7 +24,7 @@ const (
 	shaByHand    = "a1c09016a1866e55ef9e2b5ae4c123472ab9b69c"
 )
 
-const branchFields = "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event"
+const branchFields = "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event,attempt"
 
 // site is what the fake GitHub holds: the runs of the commit, and what gh run
 // list --branch prints for each workflow ID.
@@ -217,8 +217,10 @@ func TestNewerRunHintWithFailure(t *testing.T) { // AC-4
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
 		t.Fatalf("exit code = %d, want %d: a failure beats a cancellation (stderr %q)", code, cli.ExitFailed, stderr.String())
 	}
-	if got := lastLine(stderr.String()); got != newerHint {
-		t.Errorf("last stderr line = %q, want %q", got, newerHint)
+	// The failed run also gets the rerun hint, which comes last.
+	want := newerHint + "\nciwatch: 1 run failed; to rerun its failed jobs: ciwatch --rerun-failed " + shaCancelled
+	if got := stderr.String(); !strings.HasSuffix(got, want+"\n") {
+		t.Errorf("stderr = %q, want it to end with %q", got, want)
 	}
 }
 
@@ -237,7 +239,7 @@ func TestFollowIsAUsageError(t *testing.T) { // AC-5
 	if !strings.HasPrefix(stderr.String(), "ciwatch: flag provided but not defined: -follow\n") {
 		t.Errorf("stderr = %q, want it to start with the undefined-flag error", stderr.String())
 	}
-	if _, rest, _ := strings.Cut(stderr.String(), "\n"); !strings.Contains(rest, "usage: ciwatch [--json] [--once] [--go-tests] [--fetch-crashes] <commit>") {
+	if _, rest, _ := strings.Cut(stderr.String(), "\n"); !strings.Contains(rest, "usage: ciwatch [--json] [--once] [--go-tests] [--fetch-crashes] [--rerun-failed] <commit>") {
 		t.Errorf("stderr = %q, want the usage after the error", stderr.String())
 	}
 	if calls != 0 {

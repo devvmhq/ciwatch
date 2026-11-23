@@ -16,6 +16,7 @@ Schema 1 is not frozen yet: it freezes at ciwatch's first release, and until the
 | `sha` | string | always: the commit the runs are for |
 | `runs` | array of objects | always |
 | `runs[].id` | integer | always |
+| `runs[].attempt` | integer | always: 1 for a run's first attempt, higher after a rerun (`--rerun-failed`), 0 when gh doesn't report it; the report is of this attempt |
 | `runs[].workflow` | string | always |
 | `runs[].status` | string | always |
 | `runs[].conclusion` | string | always, empty while the run is not completed |

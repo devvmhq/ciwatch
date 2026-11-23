@@ -21,6 +21,7 @@ type Report struct {
 // Run is one workflow run and its jobs.
 type Run struct {
 	ID         int64  `json:"id"`
+	Attempt    int    `json:"attempt"`
 	Workflow   string `json:"workflow"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`
@@ -104,7 +105,7 @@ func buildReport(sha string, runs []runWithJobs, goTests bool) Report {
 				}
 			}
 		}
-		out.Runs[i] = Run{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr, ArtifactsError: r.ArtifactsErr}
+		out.Runs[i] = Run{ID: r.ID, Attempt: r.Attempt, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr, ArtifactsError: r.ArtifactsErr}
 		for _, c := range r.Crashes {
 			out.Runs[i].FuzzCrashes = append(out.Runs[i].FuzzCrashes, FuzzCrash{Target: c.Target, Artifact: c.Artifact, RunID: r.ID, FetchedTo: c.FetchedTo, FetchError: c.FetchErr})
 		}

@@ -94,6 +94,7 @@ type Run struct {
 	HeadBranch string
 	HeadSHA    string
 	Event      string
+	Attempt    int // 1 for the first attempt, higher after a rerun; 0 if gh didn't say
 }
 
 // Job is one job of a workflow run.
@@ -121,7 +122,7 @@ func Exec(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
-const runFields = "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event"
+const runFields = "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event,attempt"
 
 // RunList lists the workflow runs for the commit sha, once.
 func (r Runner) RunList(ctx context.Context, sha string) ([]Run, error) {
@@ -159,6 +160,7 @@ func (r Runner) listRuns(ctx context.Context, filter ...string) ([]Run, error) {
 		HeadBranch string    `json:"headBranch"`
 		HeadSHA    string    `json:"headSha"`
 		Event      string    `json:"event"`
+		Attempt    int       `json:"attempt"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil {
 		return nil, fmt.Errorf("decoding gh run list output: %w", err)
@@ -245,6 +247,17 @@ func (r Runner) FailedLog(ctx context.Context, runID, jobID int64) ([]byte, erro
 		return nil, fmt.Errorf("gh run view %s --job %s: %w", run, job, markNetwork(err))
 	}
 	return out, nil
+}
+
+// RerunFailed asks GitHub to rerun the failed jobs of the workflow run runID,
+// once. gh run rerun prints nothing useful and has no JSON form, so this is
+// one of the calls without --json. A rerun isn't safe to repeat, so callers
+// don't retry it.
+func (r Runner) RerunFailed(ctx context.Context, runID int64) error {
+	id := strconv.FormatInt(runID, 10)
+	// The error is gh's alone: the caller's message already names the run.
+	_, err := r.Exec(ctx, "gh", "run", "rerun", id, "--failed")
+	return markNetwork(err)
 }
 
 // ArtifactsLimit is how many artifacts Artifacts asks for. A run with more has

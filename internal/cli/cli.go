@@ -32,7 +32,7 @@ const (
 	ExitUnchecked = 4
 )
 
-const usage = `usage: ciwatch [--json] [--once] [--go-tests] [--fetch-crashes] <commit>
+const usage = `usage: ciwatch [--json] [--once] [--go-tests] [--fetch-crashes] [--rerun-failed] <commit>
 
 Watches every GitHub Actions run for a commit until it finishes. For a
 cancelled run, it names the newer run of the same workflow on the same branch,
@@ -40,7 +40,9 @@ if there is one, and the command to watch it. A failed job shows the last
 lines of each failed step; with --go-tests, it also shows the failing Go tests
 found in its log. A failed run's crash-<Target> artifacts are listed as fuzz
 crash inputs; with --fetch-crashes, each is downloaded into
-testdata/fuzz/<Target>/ beside the test file that declares the target.
+testdata/fuzz/<Target>/ beside the test file that declares the target. With
+--rerun-failed, the failed jobs of each failed run are rerun once, ciwatch
+waits for the new attempts, and the report is of those.
 `
 
 // Clock is the time, which tests control.
@@ -102,6 +104,17 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 		return ExitUnchecked
+	}
+	if opts.rerunFailed {
+		if want := a.rerun(ctx, runs, stderr); len(want) > 0 {
+			if runs, err = a.watchAttempts(ctx, sha, runs, want, stderr); err != nil {
+				_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
+				return ExitUnchecked
+			}
+		} else if ctx.Err() != nil {
+			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", ctx.Err())
+			return ExitUnchecked
+		}
 	}
 	newer := a.newerRuns(ctx, runs, stderr)
 	if ctx.Err() != nil { // Ctrl-C during the lookup: no table
@@ -180,6 +193,14 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			_, _ = fmt.Fprintf(stderr, "ciwatch: 1 fuzz crash input not fetched; to fetch it: ciwatch --fetch-crashes %s\n", sha)
 		case n > 1:
 			_, _ = fmt.Fprintf(stderr, "ciwatch: %d fuzz crash inputs not fetched; to fetch them: ciwatch --fetch-crashes %s\n", n, sha)
+		}
+	}
+	if !opts.rerunFailed {
+		switch n := countFailed(runs); {
+		case n == 1:
+			_, _ = fmt.Fprintf(stderr, "ciwatch: 1 run failed; to rerun its failed jobs: ciwatch --rerun-failed %s\n", sha)
+		case n > 1:
+			_, _ = fmt.Fprintf(stderr, "ciwatch: %d runs failed; to rerun their failed jobs: ciwatch --rerun-failed %s\n", n, sha)
 		}
 	}
 	if code == ExitOK && len(runs) >= gh.RunListLimit {
@@ -412,9 +433,10 @@ type options struct {
 	goTests bool
 
 	fetchCrashes bool
+	rerunFailed  bool
 }
 
-// parseArgs accepts --json, --once, --go-tests, --fetch-crashes and one commit, in any order.
+// parseArgs accepts --json, --once, --go-tests, --fetch-crashes, --rerun-failed and one commit, in any order.
 func parseArgs(args []string) (options, error) {
 	var o options
 	fs := flag.NewFlagSet("ciwatch", flag.ContinueOnError)
@@ -423,6 +445,7 @@ func parseArgs(args []string) (options, error) {
 	fs.BoolVar(&o.once, "once", false, "")
 	fs.BoolVar(&o.goTests, "go-tests", false, "")
 	fs.BoolVar(&o.fetchCrashes, "fetch-crashes", false, "")
+	fs.BoolVar(&o.rerunFailed, "rerun-failed", false, "")
 	var positional []string
 	for {
 		if err := fs.Parse(args); err != nil {
@@ -441,6 +464,9 @@ func parseArgs(args []string) (options, error) {
 	}
 	if len(positional) != 1 {
 		return options{}, errUsage
+	}
+	if o.rerunFailed && o.once {
+		return options{}, errors.New("--rerun-failed waits for the new attempts, so it can't be used with --once")
 	}
 	o.commit = positional[0]
 	return o, nil
@@ -482,6 +508,81 @@ func (a App) watch(ctx context.Context, sha string, once bool, w io.Writer) ([]g
 		case <-a.Clock.After(a.Interval):
 		}
 	}
+}
+
+// rerunnable is whether r is a completed run that --rerun-failed reruns.
+func rerunnable(r gh.Run) bool {
+	return r.Status == "completed" && (r.Conclusion == "failure" || r.Conclusion == "timed_out")
+}
+
+func countFailed(runs []gh.Run) int {
+	n := 0
+	for _, r := range runs {
+		if rerunnable(r) {
+			n++
+		}
+	}
+	return n
+}
+
+// rerun asks for the failed jobs of each failed run to be rerun, with one call
+// per run and never through retry, because a rerun isn't safe to repeat. A call
+// that fails is a warning. It returns, by run ID, the attempt each accepted
+// rerun must go past.
+func (a App) rerun(ctx context.Context, runs []gh.Run, w io.Writer) map[int64]int {
+	want := map[int64]int{}
+	for _, r := range runs {
+		if !rerunnable(r) || ctx.Err() != nil {
+			continue
+		}
+		if err := a.GH.RerunFailed(ctx, r.ID); err != nil {
+			if ctx.Err() == nil {
+				_, _ = fmt.Fprintf(w, "ciwatch: can't rerun the failed jobs of run %d (%s): %v\n", r.ID, r.Workflow, err)
+			}
+			continue
+		}
+		_, _ = fmt.Fprintf(w, "ciwatch: rerunning the failed jobs of run %d (%s)\n", r.ID, r.Workflow)
+		want[r.ID] = r.Attempt
+	}
+	return want
+}
+
+// watchAttempts lists the runs for sha, as watch does but with no grace period,
+// until every run has completed and every run in want has an attempt past the
+// one in want. prev is the runs the lines of progress are measured against.
+func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, want map[int64]int, w io.Writer) ([]gh.Run, error) {
+	for {
+		runs, err := retry(ctx, a, w, "gh run list", func() ([]gh.Run, error) {
+			return a.GH.RunList(ctx, sha)
+		})
+		if err != nil {
+			return nil, err
+		}
+		progress(w, prev, runs)
+		prev = runs
+		if allCompleted(runs) && attemptsPast(runs, want) {
+			return runs, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-a.Clock.After(a.Interval):
+		}
+	}
+}
+
+// attemptsPast is whether every run in want is in runs with a later attempt.
+func attemptsPast(runs []gh.Run, want map[int64]int) bool {
+	seen := 0
+	for _, r := range runs {
+		if n, ok := want[r.ID]; ok {
+			if r.Attempt <= n {
+				return false
+			}
+			seen++
+		}
+	}
+	return seen == len(want)
 }
 
 func short(sha string) string {
@@ -609,12 +710,15 @@ func progress(w io.Writer, prev, cur []gh.Run) {
 		old[r.ID] = r
 	}
 	for _, r := range cur {
-		if p, ok := old[r.ID]; ok && p.Status == r.Status && p.Conclusion == r.Conclusion {
+		if p, ok := old[r.ID]; ok && p.Status == r.Status && p.Conclusion == r.Conclusion && p.Attempt == r.Attempt {
 			continue
 		}
 		line := r.Status
 		if r.Conclusion != "" {
 			line += " " + r.Conclusion
+		}
+		if r.Attempt > 1 {
+			line += fmt.Sprintf(" (attempt %d)", r.Attempt)
 		}
 		_, _ = fmt.Fprintf(w, "ciwatch: run %d (%s): %s\n", r.ID, r.Workflow, line)
 	}

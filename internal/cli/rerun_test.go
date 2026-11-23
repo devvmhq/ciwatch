@@ -1,0 +1,319 @@
+package cli_test
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/devvmhq/ciwatch/internal/cli"
+)
+
+// The runs of these tests are real ones of devvmhq/devvm (their jobs are
+// recorded in testdata/gh/run-view-<id>.json), with the states the tests
+// need: a rerun's in-between states (attempt 1 completed failure, attempt 2
+// in progress) can't be recorded after the fact, so they are derived from
+// the recorded attempt 2 runs.
+const (
+	ciRun   = "44858310690" // CI, attempt 2 success is recorded in run-list-rerun-attempt2.json
+	ciRun2  = "43529187615" // CI, attempt 2 failure is recorded in run-list-rerun-attempt2-failure.json
+	docsRun = "44951284032" // Docs
+	fuzzRn  = "45017063720" // Fuzz
+)
+
+// attemptRun is a run in the shape gh run list prints it.
+func attemptRun(id, workflow, status, conclusion string, attempt int) string {
+	return fmt.Sprintf(`{"attempt":%d,"conclusion":%q,"createdAt":"2026-11-21T02:53:41Z","databaseId":%s,"status":%q,"url":"u","workflowName":%q}`,
+		attempt, conclusion, id, status, workflow)
+}
+
+func failed(id, workflow string, attempt int) string {
+	return attemptRun(id, workflow, "completed", "failure", attempt)
+}
+
+func passed(id, workflow string, attempt int) string {
+	return attemptRun(id, workflow, "completed", "success", attempt)
+}
+
+// lists is what gh run list prints: the first list for as long as the first
+// watch takes (the commit is old, so it waits out the grace period: seven
+// lists), then each of the rest once, the last one repeated.
+func lists(first string, rest ...string) []string {
+	return append(slices.Repeat([]string{first}, 7), rest...)
+}
+
+// runRerun runs ciwatch and returns what it printed.
+func runRerun(t *testing.T, opts fakeOpts, wantCode int, args ...string) (stdout, stderr string, calls *counts) {
+	t.Helper()
+	app, calls := fakeWith(t, "", nil, nil, opts)
+	var out, errOut bytes.Buffer
+	if code := app.Run(t.Context(), append(args, "HEAD"), &out, &errOut); code != wantCode {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, wantCode, errOut.String())
+	}
+	return out.String(), errOut.String(), calls
+}
+
+// TestFailedRunHintsRerun covers AC-1.
+func TestFailedRunHintsRerun(t *testing.T) {
+	const crashHint = "ciwatch: 1 fuzz crash input not fetched; to fetch it: ciwatch --fetch-crashes " + sha
+	oneFailed := "ciwatch: 1 run failed; to rerun its failed jobs: ciwatch --rerun-failed " + sha
+	twoFailed := "ciwatch: 2 runs failed; to rerun their failed jobs: ciwatch --rerun-failed " + sha
+	for _, tt := range []struct {
+		name string
+		opts fakeOpts
+		want string
+		then string // the line before the hint
+	}{
+		{"one failed run", fakeOpts{listFixtures: []string{"run-list-failure.json"}}, oneFailed, ""},
+		{"after the crash hint", fakeOpts{listFixtures: []string{"run-list-failure.json"}, artifacts: map[string]string{fuzzRun: "api-artifacts-44729305066.json"}}, oneFailed, crashHint},
+		{"timed out", fakeOpts{listFixtures: []string{"run-list-timed-out.json"}, viewFixture: map[string]string{failedRun: "run-view-44707997310-timed-out.json"}}, oneFailed, ""},
+		{"two failed runs", fakeOpts{listRaw: []string{list(failed(ciRun, "CI", 1), failed(docsRun, "Docs", 1))}}, twoFailed, ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, stderr, calls := runRerun(t, tt.opts, cli.ExitFailed)
+			if got := lastLine(stderr); got != tt.want {
+				t.Errorf("last stderr line = %q, want %q (stderr %q)", got, tt.want, stderr)
+			}
+			if tt.then != "" && !strings.Contains(stderr, tt.then+"\n"+tt.want+"\n") {
+				t.Errorf("stderr = %q, want the crash hint right before the rerun hint", stderr)
+			}
+			if len(calls.reruns) != 0 {
+				t.Errorf("gh run rerun calls for %q, want none", calls.reruns)
+			}
+		})
+	}
+}
+
+// TestRerunFailedWatchesNewAttempt covers AC-2 and AC-5.
+func TestRerunFailedWatchesNewAttempt(t *testing.T) {
+	opts := fakeOpts{listRaw: lists(list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		// The rerun is accepted, but gh still lists attempt 1, then attempt 2 queued.
+		list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(attemptRun(ciRun, "CI", "in_progress", "", 2), passed(docsRun, "Docs", 1)),
+		list(passed(ciRun, "CI", 2), passed(docsRun, "Docs", 1)),
+	)}
+	stdout, stderr, calls := runRerun(t, opts, cli.ExitOK, "--rerun-failed")
+	if want := []string{ciRun}; !slices.Equal(calls.reruns, want) {
+		t.Fatalf("gh run rerun calls for %q, want %q", calls.reruns, want)
+	}
+	if want := []int{7}; !slices.Equal(calls.rerunAfterLists, want) {
+		t.Errorf("the rerun came after %v gh run list calls, want %v: straight after the first watch", calls.rerunAfterLists, want)
+	}
+	if calls.list != 10 {
+		t.Errorf("gh run list calls = %d, want 10: three more polls after the rerun", calls.list)
+	}
+	// The jobs are fetched once, from the new attempt, after the last list.
+	want := append(append(slices.Repeat([]string{"list"}, 7), "rerun"), slices.Repeat([]string{"list"}, 3)...)
+	want = append(want, "view", "view")
+	if !reflect.DeepEqual(calls.events, want) {
+		t.Errorf("gh calls = %q, want %q", calls.events, want)
+	}
+	checkTable(t, stdout, slices.Concat(
+		[]row{runRow("CI", "completed", "success")}, jobRowsOf(t, "run-view-"+ciRun+".json"),
+		[]row{runRow("Docs", "completed", "success")}, jobRowsOf(t, "run-view-"+docsRun+".json"),
+	))
+	for _, line := range []string{
+		"ciwatch: rerunning the failed jobs of run " + ciRun + " (CI)\n",
+		"ciwatch: run " + ciRun + " (CI): in_progress (attempt 2)\n",
+		"ciwatch: run " + ciRun + " (CI): completed success (attempt 2)\n",
+	} {
+		if !strings.Contains(stderr, line) {
+			t.Errorf("stderr = %q, want it to contain %q", stderr, line)
+		}
+	}
+	if strings.Contains(stderr, "--rerun-failed") {
+		t.Errorf("stderr = %q, want no rerun hint once the new attempt passed", stderr)
+	}
+	if i := strings.Index(stderr, "rerunning"); strings.Contains(stderr[:i], "attempt") {
+		t.Errorf("stderr before the rerun = %q, want no attempt noted for attempt 1", stderr[:i])
+	}
+}
+
+// TestRerunFailedNewAttemptFails covers AC-2 and AC-5: a second failure is
+// reported with exit code 1 and is not rerun again.
+func TestRerunFailedNewAttemptFails(t *testing.T) {
+	opts := fakeOpts{
+		listRaw: lists(list(failed(ciRun2, "CI", 1)),
+			list(failed(ciRun2, "CI", 1)),
+			list(attemptRun(ciRun2, "CI", "queued", "", 2)),
+			list(failed(ciRun2, "CI", 2)),
+		),
+	}
+	stdout, stderr, calls := runRerun(t, opts, cli.ExitFailed, "--rerun-failed")
+	if want := []string{ciRun2}; !slices.Equal(calls.reruns, want) {
+		t.Errorf("gh run rerun calls for %q, want %q", calls.reruns, want)
+	}
+	if calls.list != 10 {
+		t.Errorf("gh run list calls = %d, want 10", calls.list)
+	}
+	checkTable(t, stdout, slices.Concat([]row{runRow("CI", "completed", "failure")}, jobRowsOf(t, "run-view-"+ciRun2+".json")))
+	if want := "ciwatch: run " + ciRun2 + " (CI): completed failure (attempt 2)\n"; !strings.Contains(stderr, want) {
+		t.Errorf("stderr = %q, want it to contain %q", stderr, want)
+	}
+}
+
+// TestRerunFailedRerunsEachRunOnce covers AC-5: a run first seen failing
+// while the new attempts are awaited is not rerun, and nor is a second failure.
+func TestRerunFailedRerunsEachRunOnce(t *testing.T) {
+	opts := fakeOpts{listRaw: lists(list(failed(ciRun2, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(failed(ciRun2, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(attemptRun(ciRun2, "CI", "in_progress", "", 2), passed(docsRun, "Docs", 1), attemptRun(fuzzRn, "Fuzz", "in_progress", "", 1)),
+		list(failed(ciRun2, "CI", 2), passed(docsRun, "Docs", 1), failed(fuzzRn, "Fuzz", 1)),
+	)}
+	_, stderr, calls := runRerun(t, opts, cli.ExitFailed, "--rerun-failed")
+	if want := []string{ciRun2}; !slices.Equal(calls.reruns, want) {
+		t.Errorf("gh run rerun calls for %q, want only the first failure, once: %q", calls.reruns, want)
+	}
+	if calls.list != 10 {
+		t.Errorf("gh run list calls = %d, want 10: it stops once every run is completed, with no further wait", calls.list)
+	}
+	if n := strings.Count(stderr, "rerunning the failed jobs"); n != 1 {
+		t.Errorf("stderr = %q, want one rerunning line, got %d", stderr, n)
+	}
+}
+
+// TestRerunFailedSkipsPassedAndCancelled covers AC-3.
+func TestRerunFailedSkipsPassedAndCancelled(t *testing.T) {
+	skipped := fakeOpts{listRaw: []string{list(passed(ciRun, "CI", 1), attemptRun(docsRun, "Docs", "completed", "skipped", 1))}}
+	for _, tt := range []struct {
+		name string
+		opts func() fakeOpts
+		code int
+	}{
+		{"success", func() fakeOpts { return fakeOpts{listFixtures: []string{"run-list-success.json"}} }, cli.ExitOK},
+		{"cancelled", func() fakeOpts { return fakeOpts{listFixtures: []string{"run-list-cancelled.json"}} }, cli.ExitCancelled},
+		{"skipped", func() fakeOpts { return skipped }, cli.ExitOK},
+		{"in progress, then success", func() fakeOpts {
+			return fakeOpts{listFixtures: []string{"run-list-in-progress.json", "run-list-in-progress.json", "run-list-success.json"}}
+		}, cli.ExitOK},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			wantOut, wantErr, want := runRerun(t, tt.opts(), tt.code)
+			gotOut, gotErr, got := runRerun(t, tt.opts(), tt.code, "--rerun-failed")
+			if len(got.reruns) != 0 {
+				t.Errorf("gh run rerun calls for %q, want none", got.reruns)
+			}
+			if got.list != want.list || got.view != want.view || !slices.Equal(got.events, want.events) || !slices.Equal(got.clock.waits, want.clock.waits) {
+				t.Errorf("with the flag: %d lists, %d views, waits %v; without: %d, %d, %v: want the same",
+					got.list, got.view, got.clock.waits, want.list, want.view, want.clock.waits)
+			}
+			if gotOut != wantOut || gotErr != wantErr {
+				t.Errorf("with the flag: stdout %q, stderr %q; without: %q, %q: want the same", gotOut, gotErr, wantOut, wantErr)
+			}
+		})
+	}
+}
+
+// TestRerunFailedCallFails covers AC-4.
+func TestRerunFailedCallFails(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		err  func(t *testing.T) error
+	}{
+		{"refused", func(*testing.T) error { return errors.New("gh: exit status 1: run " + ciRun + " cannot be rerun") }},
+		{"network", networkErr},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rerr := tt.err(t)
+			opts := fakeOpts{
+				rerunErr: map[string]error{ciRun: rerr},
+				listRaw: lists(list(failed(ciRun, "CI", 1), failed(fuzzRn, "Fuzz", 1)),
+					// Only the Fuzz run is waited for; the CI run stays at attempt 1.
+					list(failed(ciRun, "CI", 1), failed(fuzzRn, "Fuzz", 1)),
+					list(failed(ciRun, "CI", 1), attemptRun(fuzzRn, "Fuzz", "in_progress", "", 2)),
+					list(failed(ciRun, "CI", 1), passed(fuzzRn, "Fuzz", 2)),
+				),
+			}
+			stdout, stderr, calls := runRerun(t, opts, cli.ExitFailed, "--rerun-failed")
+			if want := []string{ciRun, fuzzRn}; !slices.Equal(calls.reruns, want) {
+				t.Errorf("gh run rerun calls for %q, want one each, with no retry: %q", calls.reruns, want)
+			}
+			if want := "ciwatch: can't rerun the failed jobs of run " + ciRun + " (CI): " + rerr.Error() + "\n"; !strings.Contains(stderr, want) {
+				t.Errorf("stderr = %q, want it to contain %q", stderr, want)
+			}
+			if want := "ciwatch: rerunning the failed jobs of run " + fuzzRn + " (Fuzz)\n"; !strings.Contains(stderr, want) {
+				t.Errorf("stderr = %q, want it to contain %q", stderr, want)
+			}
+			if calls.list != 10 {
+				t.Errorf("gh run list calls = %d, want 10: a wait for the Fuzz run's new attempt only", calls.list)
+			}
+			for _, d := range calls.clock.waits {
+				if d != testInterval {
+					t.Errorf("waits = %v, want only poll intervals: a failed rerun call isn't retried after a backoff", calls.clock.waits)
+					break
+				}
+			}
+			checkTable(t, stdout, slices.Concat(
+				[]row{runRow("CI", "completed", "failure")}, jobRowsOf(t, "run-view-"+ciRun+".json"),
+				[]row{runRow("Fuzz", "completed", "success")}, jobRowsOf(t, "run-view-"+fuzzRn+".json"),
+			))
+		})
+	}
+}
+
+// TestRerunFailedCallFailsOnEveryRun covers AC-4: with every call refused
+// there is no new attempt to wait for.
+func TestRerunFailedCallFailsOnEveryRun(t *testing.T) {
+	opts := fakeOpts{
+		rerunErr: map[string]error{ciRun: errors.New("gh: exit status 1: run cannot be rerun")},
+		listRaw:  lists(list(failed(ciRun, "CI", 1))),
+	}
+	_, stderr, calls := runRerun(t, opts, cli.ExitFailed, "--rerun-failed")
+	if calls.list != 7 {
+		t.Errorf("gh run list calls = %d, want 7: no list after the failed rerun call", calls.list)
+	}
+	if !strings.Contains(stderr, "ciwatch: can't rerun the failed jobs of run "+ciRun+" (CI): ") {
+		t.Errorf("stderr = %q, want the warning", stderr)
+	}
+}
+
+// TestRerunFailedWithOnceIsUsage covers AC-6.
+func TestRerunFailedWithOnceIsUsage(t *testing.T) {
+	for _, args := range [][]string{{"--rerun-failed", "--once", "HEAD"}, {"--once", "--rerun-failed", "HEAD"}} {
+		app, calls := fake(t, "run-list-failure.json", nil, nil)
+		var stdout, stderr bytes.Buffer
+		if code := app.Run(t.Context(), args, &stdout, &stderr); code != cli.ExitUsage {
+			t.Errorf("%q: exit code = %d, want %d", args, code, cli.ExitUsage)
+		}
+		if want := "ciwatch: --rerun-failed waits for the new attempts, so it can't be used with --once\nusage: ciwatch"; !strings.HasPrefix(stderr.String(), want) {
+			t.Errorf("%q: stderr = %q, want it to start with %q", args, stderr.String(), want)
+		}
+		if !strings.Contains(stderr.String(), "--rerun-failed") || stdout.Len() != 0 {
+			t.Errorf("%q: stdout = %q, stderr = %q, want the usage on stderr and nothing on stdout", args, stdout.String(), stderr.String())
+		}
+		if len(calls.events) != 0 || len(calls.reruns) != 0 {
+			t.Errorf("%q: gh calls = %q, want none", args, calls.events)
+		}
+	}
+}
+
+// TestUsageNamesRerunFailed covers AC-1: the flag is in the usage.
+func TestUsageNamesRerunFailed(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	cli.App{}.Run(t.Context(), nil, &stdout, &stderr)
+	if want := "usage: ciwatch [--json] [--once] [--go-tests] [--fetch-crashes] [--rerun-failed] <commit>"; !strings.HasPrefix(stderr.String(), want) {
+		t.Errorf("stderr = %q, want it to start with %q", stderr.String(), want)
+	}
+}
+
+// TestJSONGoldenAfterRerun covers AC-2: runs[].attempt is the attempt that
+// was reported, and the output matches the golden file.
+func TestJSONGoldenAfterRerun(t *testing.T) {
+	app, _ := fakeWith(t, "", nil, nil, fakeOpts{listFixtures: []string{"run-list-rerun-attempt2.json"}})
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"--json", "HEAD"}, &stdout, &stderr); code != cli.ExitOK {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitOK, stderr.String())
+	}
+	want, err := os.ReadFile(filepath.Join("..", "..", "testdata", "golden", "run-list-rerun-attempt2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stdout.String() != string(want) {
+		t.Errorf("output differs from the golden file:\n got: %s\nwant: %s", stdout.String(), want)
+	}
+}

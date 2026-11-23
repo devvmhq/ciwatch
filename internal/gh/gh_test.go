@@ -360,7 +360,7 @@ func TestMarkNetworkIgnoresMarkersInURLs(t *testing.T) {
 	}
 }
 
-const headFields = "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event"
+const headFields = "databaseId,workflowDatabaseId,workflowName,status,conclusion,url,createdAt,updatedAt,headBranch,headSha,event,attempt"
 
 func TestRunListDecodesHeadBranchAndSHA(t *testing.T) {
 	var args []string
