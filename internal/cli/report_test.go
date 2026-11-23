@@ -199,7 +199,7 @@ func TestTableFromReport(t *testing.T) {
 		}
 	}
 	checkTable(t, table.String(), want)
-	block := "\nFuzzPromisorHostSite (Fuzz, run 44729305066):\n  (no failing tests found in the log)\n"
+	block := "\nFuzzPromisorHostSite (Fuzz, run 44729305066):\n  (no failed step in the log)\n"
 	if !strings.HasSuffix(table.String(), block) || strings.Count(table.String(), "\n\n") != 1 {
 		t.Errorf("table = %q, want it to end with the one block %q", table.String(), block)
 	}

@@ -9,6 +9,7 @@ ciwatch watches every GitHub Actions run for a commit until it finishes, and sho
 | `cmd/ciwatch/` | the entry point; the only `os.Exit` and the only use of the real stdin, stdout and stderr |
 | `internal/cli/` | the command line: arguments, output (a compact table, or `--json`), exit codes |
 | `internal/gh/` | the one runner every `gh` and `git` call goes through, and the decoding of its output |
+| `internal/steplog/` | finds the last 40 lines of each failed step in a job's log, by the step's times |
 | `internal/testlog/` | parses failing tests and gotestsum's summary out of a go test log |
 | `testdata/` | recorded `gh` output and CI logs that the tests feed in |
 | `testdata/golden/` | the exact `--json` output for a fixture; changing the output means updating it in the same commit |

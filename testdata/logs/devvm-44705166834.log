@@ -1,0 +1,717 @@
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	﻿2026-11-20T08:46:09.3888219Z Current runner version: '2.338.2'
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3906522Z ##[group]Runner Image Provisioner
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3907270Z Hosted Compute Agent
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3907677Z Version: 20261103.629
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3908145Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3908914Z Build Date: 2026-11-03T17:26:59Z
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3909405Z Worker ID: {a9961e24-dcf6-489c-8054-9a76084a1f02}
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3909977Z Region: us-west-2
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3910368Z Cloud: AWS
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3910738Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3911704Z ##[group]Operating System
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3912156Z Ubuntu
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3912555Z 26.04.1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3912907Z LTS
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3913269Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3913654Z ##[group]Runner Image
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3914078Z Image: ubuntu-26.04
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3914477Z Version: 20261111.82.6
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3915381Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261111.82/images/ubuntu/Ubuntu2604-Readme.md
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3916487Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261111.82
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3917179Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3917973Z ##[group]GITHUB_TOKEN Permissions
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3919743Z Contents: read
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3920176Z Metadata: read
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3920611Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3922047Z Secret source: Actions
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3922744Z Cache mode: write
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.3923209Z Prepare workflow directory
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.4156011Z Prepare all required actions
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.4192919Z Getting action download info
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:09.7790396Z Download action repository 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:11.6548265Z Download action repository 'jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a' (SHA:90f833d396d0cc3674b631d2d225e306476c303a)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.1360924Z Download action repository 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' (SHA:55cc8345863c7cc4c66a329aec7e433d2d1c52a9)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.4509913Z Complete job name: check (ubuntu-latest, America/Los_Angeles)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5354131Z ##[group]Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5355428Z with:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5356068Z   persist-credentials: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5356841Z   repository: devvmhq/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5363294Z   token: ***
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5363974Z   ssh-strict: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5364644Z   ssh-user: git
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5365271Z   clean: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5365938Z   sparse-checkout-cone-mode: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5366720Z   fetch-depth: 1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5367416Z   fetch-tags: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5368114Z   show-progress: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5368985Z   lfs: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5369652Z   submodules: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5370340Z   set-safe-directory: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5371116Z   allow-unsafe-pr-checkout: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:12.5372204Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2060193Z Syncing repository: devvmhq/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2061488Z ##[group]Getting Git version info
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2062039Z Working directory is '/home/runner/work/devvm/devvm'
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2062769Z [command]/usr/bin/git version
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2063102Z git version 2.56.1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2064077Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2067456Z Temporarily overriding HOME='/home/runner/work/_temp/b350695b-ce2a-4eca-b862-655848315daf' before making global git config changes
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2068039Z Adding repository directory to the temporary git global config as a safe directory
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2070656Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/devvm/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2583234Z Deleting the contents of '/home/runner/work/devvm/devvm'
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2595844Z ##[group]Determining repository object format
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2596548Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2597296Z ##[group]Initializing the repository
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.2601134Z [command]/usr/bin/git init /home/runner/work/devvm/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3114085Z hint: Using 'master' as the name for the initial branch. This default branch name
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3114646Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3115042Z hint: to use in all of your new repositories, which will suppress this warning,
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3115310Z hint: call:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3115459Z hint:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3115690Z hint: 	git config --global init.defaultBranch <name>
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3115920Z hint:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3116197Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3116577Z hint: 'development'. The just-created branch can be renamed via this command:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3116870Z hint:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3117035Z hint: 	git branch -m <name>
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3117211Z hint:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3117465Z hint: Disable this message with "git config set advice.defaultBranchName false"
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3130720Z Initialized empty Git repository in /home/runner/work/devvm/devvm/.git/
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3137801Z [command]/usr/bin/git remote add origin https://github.com/devvmhq/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3191245Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3191676Z ##[group]Disabling automatic garbage collection
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3193142Z [command]/usr/bin/git config --local gc.auto 0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3216473Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3217173Z ##[group]Setting up auth
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3217510Z Removing SSH command configuration
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3220611Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.3242854Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.5734415Z Removing HTTP extra header
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.5739061Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.5763509Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.5942486Z Removing includeIf entries pointing to credentials config files
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.5952656Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.5968880Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.6139670Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-88b77918-de70-4f69-9055-2ff79797cec3.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.6166153Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/devvm/devvm/.git.path /home/runner/work/_temp/git-credentials-88b77918-de70-4f69-9055-2ff79797cec3.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.6187601Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/devvm/devvm/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-88b77918-de70-4f69-9055-2ff79797cec3.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.6212762Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-88b77918-de70-4f69-9055-2ff79797cec3.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.6235464Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-88b77918-de70-4f69-9055-2ff79797cec3.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.6255740Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.6256052Z ##[group]Fetching the repository
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:16.6262209Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +755f9bfd934b50ed1eb24d05eed2ae1be1f18042:refs/remotes/origin/main
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8522531Z From https://github.com/devvmhq/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8522988Z  * [new ref]         755f9bfd934b50ed1eb24d05eed2ae1be1f18042 -> origin/main
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8530814Z [command]/usr/bin/git branch --list --remote origin/main
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8552600Z   origin/main
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8558181Z [command]/usr/bin/git rev-parse refs/remotes/origin/main
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8579565Z 755f9bfd934b50ed1eb24d05eed2ae1be1f18042
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8581253Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8581694Z ##[group]Determining the checkout info
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8582153Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8582463Z [command]/usr/bin/git sparse-checkout disable
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8627803Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8646249Z ##[group]Checking out the ref
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.8659509Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9433664Z Switched to a new branch 'main'
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9439079Z branch 'main' set up to track 'origin/main'.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9443844Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9503166Z [command]/usr/bin/git log -1 --format=%H
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9508283Z 755f9bfd934b50ed1eb24d05eed2ae1be1f18042
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9519461Z ##[group]Removing auth
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9520028Z Removing SSH command configuration
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9520902Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9541564Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9735610Z Removing HTTP extra header
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9738056Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9760085Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9933322Z Removing includeIf entries pointing to credentials config files
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9940477Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9966558Z includeif.gitdir:/home/runner/work/devvm/devvm/.git.path
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9967030Z includeif.gitdir:/home/runner/work/devvm/devvm/.git/worktrees/*.path
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9967452Z includeif.gitdir:/github/workspace/.git.path
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9967891Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9981053Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/devvm/devvm/.git.path
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9986594Z /home/runner/work/_temp/git-credentials-88b77918-de70-4f69-9055-2ff79797cec3.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:17.9999301Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/devvm/devvm/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-88b77918\-de70\-4f69\-9055\-2ff79797cec3\.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0022055Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/devvm/devvm/.git/worktrees/*.path
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0037794Z /home/runner/work/_temp/git-credentials-88b77918-de70-4f69-9055-2ff79797cec3.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0052837Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/devvm/devvm/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-88b77918\-de70\-4f69\-9055\-2ff79797cec3\.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0065602Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0083950Z /github/runner_temp/git-credentials-88b77918-de70-4f69-9055-2ff79797cec3.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0085174Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-88b77918\-de70\-4f69\-9055\-2ff79797cec3\.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0106198Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0121593Z /github/runner_temp/git-credentials-88b77918-de70-4f69-9055-2ff79797cec3.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0127035Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-88b77918\-de70\-4f69\-9055\-2ff79797cec3\.config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0150063Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0325893Z Removing credentials config '/home/runner/work/_temp/git-credentials-88b77918-de70-4f69-9055-2ff79797cec3.config'
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0332606Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0538374Z ##[group]Run jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0538979Z with:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0539159Z   version: 2026.11.10
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0539323Z   auto_update: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0539485Z   minimum_release_age: 24h
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0539656Z   install: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0539817Z   monorepo: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0539976Z   bootstrap: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0540124Z   cache: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0540277Z   cache_save: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0540438Z   cache_save_post: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0540669Z   cache_restore_retry_budget: 0s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0540853Z   cache_save_retry_budget: 0s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0541033Z   cache_key_prefix: mise-v1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0541203Z   cache_max_age_days: 30
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0541372Z   experimental: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0541525Z   log_level: info
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0541672Z   reshim: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0541820Z   add_shims_to_path: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0543742Z   github_token: ***
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0543913Z   persist_github_token: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0544110Z   fetch_from_github: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0544277Z   env: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0544429Z   export_path: true
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0544588Z   wings_enabled: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.0544753Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.1963380Z ##[group]Restoring mise cache
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.2001795Z [command]/usr/bin/ldd --version
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.2035519Z ldd (Ubuntu GLIBC 2.43-2ubuntu2.4) 2.43
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.2035985Z Copyright (C) 2024 Free Software Foundation, Inc.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.2036535Z This is free software; see the source for copying conditions.  There is NO
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.2037211Z warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.2037786Z Written by Roland McGrath and Ulrich Drepper.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.4320270Z Hashed mise config files in 0.2s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7654902Z mise cache not found for mise-v1-linux-x64-ubuntu26-2026.11.10-p692-aac93a4f2907a417bc9a2d951a5a8d0fa4ae9490ae05ba1d7c8d530a14483212
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7658994Z `minimum_release_age` is ignored because an explicit mise version was provided
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7676818Z [command]/usr/bin/ldd --version
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7710040Z ldd (Ubuntu GLIBC 2.43-2ubuntu2.4) 2.43
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7710361Z Copyright (C) 2024 Free Software Foundation, Inc.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7710661Z This is free software; see the source for copying conditions.  There is NO
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7711013Z warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7711327Z Written by Roland McGrath and Ulrich Drepper.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7739256Z ##[group]Download mise@2026.11.10
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7749178Z [command]/usr/local/bin/zstd --version
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7769985Z *** Zstandard CLI (64-bit) v1.5.7, by Yann Collet ***
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7777755Z [command]/usr/bin/tar --zstd --version
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7799938Z tar (GNU tar) 1.35
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7800408Z Copyright (C) 2023 Free Software Foundation, Inc.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7800971Z License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7801868Z This is free software: you are free to change and redistribute it.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7802538Z There is NO WARRANTY, to the extent permitted by law.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7802810Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7803015Z Written by John Gilmore and Jay Fenlason.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:18.7815075Z Using curl to download mise
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:19.6955922Z Verified mise-v2026.11.10-linux-x64.tar.zst against the signed packslip
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:19.6964524Z [command]/usr/bin/tar --zstd -xf /home/runner/work/_temp/mise-action-k7xcc8/mise-v2026.11.10-linux-x64.tar.zst -C /home/runner/work/_temp/mise-action-k7xcc8
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:19.9352325Z [command]/usr/bin/mv /home/runner/work/_temp/mise-action-k7xcc8/mise/bin/mise /home/runner/.local/share/mise/bin/mise
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.0994830Z ##[group]Setting env vars
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.0995424Z Setting MISE_LOG_LEVEL=info
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.0998019Z Setting MISE_TRUSTED_CONFIG_PATHS=/home/runner/work/devvm/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.0998644Z Setting MISE_YES=1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.0999174Z Adding /home/runner/.local/share/mise/shims to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.0999810Z ##[group]Running mise --version
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.1007782Z [command]/home/runner/.local/share/mise/bin/mise --version
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.1057930Z 2026.11.10 linux-x64 (2026-11-18)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.1072596Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.1205960Z Detected a mise lock file, running `mise install --locked`
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.1206662Z ##[group]Running mise install --locked
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.1216401Z [command]/home/runner/.local/share/mise/bin/mise install --locked
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.1309612Z ^[[2mmise^[[0m ^[[2mby @jdx^[[0m – installing 15 tools
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.4397238Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mgotestsum^[[0m@1.13.0                                                      306ms  ^[[2mgotestsum_1.13.0_linux_amd64.tar.gz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.5376924Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mlychee^[[0m@0.24.2                                                         401ms  ^[[2mlychee-x86_64-unknown-linux-gnu.tar.gz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.5822806Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mvale^[[0m@3.27.0                                                           448ms  ^[[2mvale_3.27.0_Linux_64-bit.tar.gz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.5826922Z ^[[33mmise^[[0m ^[[33mWARN^[[0m  actionlint is deprecated: jactionlint is an actively maintained fork of actionlint with upstream fixes merged. Run `mise use jactionlint` instead.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.6805192Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mgolangci-lint^[[0m@2.15.0                                                  545ms  ^[[2mgolangci-lint-2.15.0-linux-amd64.tar.gz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.7200217Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mactionlint^[[0m@1.7.12                                                     137ms  ^[[2mactionlint_1.7.12_linux_amd64.tar.gz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.7964302Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mhugo^[[0m@0.170.1                                                          662ms  ^[[2mhugo_0.170.1_linux-amd64.tar.gz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.8701338Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mshellcheck^[[0m@0.11.0                                                     334ms  ^[[2mshellcheck-v0.11.0.linux.x86_64.tar.xz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.8905838Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mminisign^[[0m@0.12                                                         170ms  ^[[2mminisign-0.12-linux.tar.gz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.9868384Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mgoreleaser^[[0m@2.20.2                                                     852ms  ^[[2mgoreleaser_Linux_x86_64.tar.gz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:20.9883207Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mzizmor^[[0m@1.32.0                                                         309ms  ^[[2mzizmor-x86_64-unknown-linux-gnu.tar.gz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.0204357Z ^[[2mmise^[[0m ^[[34mnode^[[0m@24.22.3 v24.22.3
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.1160079Z ^[[2mmise^[[0m ^[[34mnode^[[0m@24.22.3 11.19.1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.1420483Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mnode^[[0m@24.22.3                                                          1.7s  ^[[2mnode-v24.22.3-linux-x64.tar.gz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.3068846Z ^[[2mmise^[[0m ^[[34mgo^[[0m@1.27.4 go version go1.27.4 linux/amd64
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.3890532Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mgo^[[0m@1.27.4                                                             2.3s  ^[[2mgo1.27.4.linux-amd64.tar.gz^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.4372891Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mmarkdownlint-cli2^[[0m@0.24.1                                              297ms
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.4570524Z ^[[2mmise^[[0m ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e go: downloading go.uber.org/nilaway v0.0.0-20261112030514-ccd005690d1e
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.4599303Z ^[[2mmise^[[0m ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0 go: downloading golang.org/x/vuln v1.10.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.6459424Z ^[[2mmise^[[0m ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0 go: downloading golang.org/x/telemetry v0.0.0-20261116191925-e77a43154acb
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.6863812Z ^[[2mmise^[[0m ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0 go: downloading golang.org/x/mod v0.43.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.6879664Z ^[[2mmise^[[0m ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0 go: downloading golang.org/x/tools v0.53.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.7320895Z ^[[2mmise^[[0m ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e go: downloading golang.org/x/tools v0.50.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.7527792Z ^[[2mmise^[[0m ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e go: downloading golang.org/x/exp/typeparams v0.0.0-20260908205506-85c1c2202aba
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.8191931Z ^[[2mmise^[[0m ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0 go: downloading golang.org/x/sync v0.25.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:22.8497567Z ^[[2mmise^[[0m ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e go: downloading github.com/klauspost/compress v1.20.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:23.1224709Z ^[[2mmise^[[0m ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e go: downloading golang.org/x/sync v0.23.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:23.1298358Z ^[[2mmise^[[0m ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e go: downloading golang.org/x/mod v0.41.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:23.1371278Z ^[[2mmise^[[0m ^[[36m█████████████^[[0m^[[31m^[[0m^[[2m░░░^[[0m 13/15 · 3.0s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:23.1429883Z   ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0                           installing  748ms
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:23.1430883Z   ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e  installing  748ms
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:26.1390587Z ^[[2mmise^[[0m ^[[36m█████████████^[[0m^[[31m^[[0m^[[2m░░░^[[0m 13/15 · 6.0s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:26.1479772Z   ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0                           installing  3.7s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:26.1539913Z   ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e  installing  3.7s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:29.1400464Z ^[[2mmise^[[0m ^[[36m█████████████^[[0m^[[31m^[[0m^[[2m░░░^[[0m 13/15 · 9.0s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:29.1510145Z   ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0                           installing  6.7s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:29.1540665Z   ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e  installing  6.7s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:32.1420826Z ^[[2mmise^[[0m ^[[36m█████████████^[[0m^[[31m^[[0m^[[2m░░░^[[0m 13/15 · 12.0s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:32.1541213Z   ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0                           installing  9.7s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:32.1542351Z   ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e  installing  9.7s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:35.1420353Z ^[[2mmise^[[0m ^[[36m█████████████^[[0m^[[31m^[[0m^[[2m░░░^[[0m 13/15 · 15.0s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:35.1459967Z   ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0                           installing  12.8s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:35.1519757Z   ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e  installing  12.8s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:38.1530329Z ^[[2mmise^[[0m ^[[36m█████████████^[[0m^[[31m^[[0m^[[2m░░░^[[0m 13/15 · 18.0s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:38.1610112Z   ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0                           installing  15.8s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:38.1770592Z   ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e  installing  15.8s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:41.1440464Z ^[[2mmise^[[0m ^[[36m█████████████^[[0m^[[31m^[[0m^[[2m░░░^[[0m 13/15 · 21.0s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:41.1520024Z   ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0                           installing  18.8s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:41.1579838Z   ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e  installing  18.8s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:41.4140695Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mgo:go.uber.org/nilaway/cmd/nilaway^[[0m@0.0.0-20261112030514-ccd005690d1e  19.0s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:41.9791833Z ^[[2mmise^[[0m ^[[38;5;10m✓^[[0m ^[[34mgo:golang.org/x/vuln/cmd/govulncheck^[[0m@1.10.0                           19.6s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:41.9795944Z ^[[2mmise^[[0m ^[[36m████████████████^[[0m^[[31m^[[0m^[[2m^[[0m 15/15 · installed 15 tools in 21.8s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:42.0204972Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:42.0205781Z ##[group]Saving mise cache
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:42.0285386Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/devvm/devvm --files-from manifest.txt --use-compress-program zstdmt
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:45.4779619Z Sent 0 of 290402334 (0.0%), 0.0 MBs/sec
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:46.4764403Z Sent 21966878 of 290402334 (7.6%), 10.5 MBs/sec
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.1094796Z Sent 290402334 of 290402334 (100.0%), 105.2 MBs/sec
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4513753Z Cache saved from /home/runner/.local/share/mise with key: mise-v1-linux-x64-ubuntu26-2026.11.10-p692-aac93a4f2907a417bc9a2d951a5a8d0fa4ae9490ae05ba1d7c8d530a14483212
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4514827Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4515220Z ##[group]Running mise ls
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4527630Z [command]/home/runner/.local/share/mise/bin/mise ls
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4656525Z actionlint                            1.7.12                             ~/work/devvm/devvm/mise.toml  1.7.12
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4657019Z go                                    1.27.4                             ~/work/devvm/devvm/mise.toml  1.27.4
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4657494Z go:go.uber.org/nilaway/cmd/nilaway    0.0.0-20261112030514-ccd005690d1e  ~/work/devvm/devvm/mise.toml  0.0.0-20261112030514-ccd005690d1e
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4657999Z go:golang.org/x/vuln/cmd/govulncheck  1.10.0                             ~/work/devvm/devvm/mise.toml  1.10.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4658397Z golangci-lint                         2.15.0                             ~/work/devvm/devvm/mise.toml  2.15.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4658983Z goreleaser                            2.20.2                             ~/work/devvm/devvm/mise.toml  2.20.2
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4659319Z gotestsum                             1.13.0                             ~/work/devvm/devvm/mise.toml  1.13.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4659655Z hugo                                  0.170.1                            ~/work/devvm/devvm/mise.toml  0.170.1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4659986Z lychee                                0.24.2                             ~/work/devvm/devvm/mise.toml  0.24.2
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4660326Z markdownlint-cli2                     0.24.1                             ~/work/devvm/devvm/mise.toml  0.24.1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4660678Z minisign                              0.12                               ~/work/devvm/devvm/mise.toml  0.12
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4661004Z node                                  24.22.3                            ~/work/devvm/devvm/mise.toml  24.22.3
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4661326Z shellcheck                            0.11.0                             ~/work/devvm/devvm/mise.toml  0.11.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4661643Z vale                                  3.27.0                             ~/work/devvm/devvm/mise.toml  3.27.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4661963Z zizmor                                1.32.0                             ~/work/devvm/devvm/mise.toml  1.32.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4673392Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4817120Z ##[group]Exporting mise environment variables
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.4965404Z [command]/home/runner/.local/share/mise/bin/mise env --json
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5076927Z {
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5077604Z   "CGO_ENABLED": "0",
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5077903Z   "GOBIN": "/home/runner/.local/share/mise/installs/go/1.27.4/bin",
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5078217Z   "GOROOT": "/home/runner/.local/share/mise/installs/go/1.27.4",
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5081890Z   "PATH": "/home/runner/.local/share/mise/installs/go/1.27.4/bin:/home/runner/.local/share/mise/installs/golangci-lint/2.15.0/golangci-lint-2.15.0-linux-amd64:/home/runner/.local/share/mise/installs/gotestsum/1.13.0:/home/runner/.local/share/mise/installs/go-golang-org-x-vuln-cmd-govulncheck/1.10.0/bin:/home/runner/.local/share/mise/installs/go-go-uber-org-nilaway-cmd-nilaway/0.0.0-20261112030514-ccd005690d1e/bin:/home/runner/.local/share/mise/installs/goreleaser/2.20.2:/home/runner/.local/share/mise/installs/hugo/0.170.1:/home/runner/.local/share/mise/installs/vale/3.27.0:/home/runner/.local/share/mise/installs/lychee/0.24.2/.mise-bins:/home/runner/.local/share/mise/installs/node/24.22.3/bin:/home/runner/.local/share/mise/installs/markdownlint-cli2/0.24.1~aube~d90c28a31b70d972/node_modules/.bin:/home/runner/.local/share/mise/installs/shellcheck/0.11.0/shellcheck-v0.11.0:/home/runner/.local/share/mise/installs/actionlint/1.7.12:/home/runner/.local/share/mise/installs/zizmor/1.32.0:/home/runner/.local/share/mise/installs/minisign/0.12/minisign-linux/x86_64:/home/runner/.local/share/mise/shims:/home/runner/.local/share/mise/bin:/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games"
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5086106Z }
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5216669Z Adding /home/runner/.local/share/mise/installs/minisign/0.12/minisign-linux/x86_64 to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5217272Z Adding /home/runner/.local/share/mise/installs/zizmor/1.32.0 to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5217754Z Adding /home/runner/.local/share/mise/installs/actionlint/1.7.12 to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5218325Z Adding /home/runner/.local/share/mise/installs/shellcheck/0.11.0/shellcheck-v0.11.0 to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5219192Z Adding /home/runner/.local/share/mise/installs/markdownlint-cli2/0.24.1~aube~d90c28a31b70d972/node_modules/.bin to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5219799Z Adding /home/runner/.local/share/mise/installs/node/24.22.3/bin to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5220288Z Adding /home/runner/.local/share/mise/installs/lychee/0.24.2/.mise-bins to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5220758Z Adding /home/runner/.local/share/mise/installs/vale/3.27.0 to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5221262Z Adding /home/runner/.local/share/mise/installs/hugo/0.170.1 to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5221816Z Adding /home/runner/.local/share/mise/installs/goreleaser/2.20.2 to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5222437Z Adding /home/runner/.local/share/mise/installs/go-go-uber-org-nilaway-cmd-nilaway/0.0.0-20261112030514-ccd005690d1e/bin to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5223029Z Adding /home/runner/.local/share/mise/installs/go-golang-org-x-vuln-cmd-govulncheck/1.10.0/bin to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5223595Z Adding /home/runner/.local/share/mise/installs/gotestsum/1.13.0 to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5224188Z Adding /home/runner/.local/share/mise/installs/golangci-lint/2.15.0/golangci-lint-2.15.0-linux-amd64 to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5224730Z Adding /home/runner/.local/share/mise/installs/go/1.27.4/bin to PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5225249Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5795193Z ##[group]Run actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5795548Z with:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5795749Z   path: ~/.npm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5796061Z   key: npm-Linux-44723ef8ec85034b84f930f23b746e690b668182431d0127cb0eae8b27e40020
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5796443Z   enableCrossOsArchive: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5796734Z   fail-on-cache-miss: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5796976Z   lookup-only: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5797194Z   save-always: false
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5797515Z env:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5797739Z   MISE_LOG_LEVEL: info
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5798046Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/devvm/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5798337Z   MISE_YES: 1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5798737Z   CGO_ENABLED: 0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5799039Z   GOBIN: /home/runner/.local/share/mise/installs/go/1.27.4/bin
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5799400Z   GOROOT: /home/runner/.local/share/mise/installs/go/1.27.4
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.5799682Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:47.9581046Z Cache hit for: npm-Linux-44723ef8ec85034b84f930f23b746e690b668182431d0127cb0eae8b27e40020
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.3002614Z Received 896523 of 896523 (100.0%), 0.9 MBs/sec
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.3003262Z Cache Size: ~1 MB (896523 B)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.3027876Z [command]/usr/bin/tar -xf /home/runner/work/_temp/340ecce8-5cd7-4418-a0d8-19266e8d0447/cache.tzst -P -C /home/runner/work/devvm/devvm --use-compress-program unzstd
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.3084163Z Cache restored successfully
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5120278Z Cache restored from key: npm-Linux-44723ef8ec85034b84f930f23b746e690b668182431d0127cb0eae8b27e40020
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5215087Z ##[group]Run mise run lint
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5215474Z ^[[36;1mmise run lint^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5238440Z shell: /usr/bin/bash -e {0}
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5238920Z env:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5239136Z   MISE_LOG_LEVEL: info
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5239478Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/devvm/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5239785Z   MISE_YES: 1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5240034Z   CGO_ENABLED: 0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5240333Z   GOBIN: /home/runner/.local/share/mise/installs/go/1.27.4/bin
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5240673Z   GOROOT: /home/runner/.local/share/mise/installs/go/1.27.4
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5240997Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5525606Z ^[[38;5;12m[lint:code]^[[0m ^[[1m$ golangci-lint run^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.5543208Z ^[[32m^[[2m[docs:diagrams]^[[0m ^[[1m$ lock=$({ sha256sum docs/package-lock.json 2>/dev/null || shasum -a 256 docs/package-lock.json; } | cut -c1-64)^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:50.0303387Z ^[[32m^[[2m[docs:diagrams]^[[0m 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:50.0321141Z ^[[32m^[[2m[docs:diagrams]^[[0m added 1 package in 411ms
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:50.0569525Z ^[[32m^[[2m[docs:diagrams]^[[0m ^[[1m$ node docs/render-diagrams.mjs^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:50.2576374Z ^[[32m^[[2m[docs:diagrams]^[[0m render-diagrams: 18 diagrams in docs/.build/diagrams, 18 drawn, 0 files deleted
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:50.2626247Z ^[[32m^[[2m[docs:diagrams]^[[0m Finished in 708.3ms
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:50.2672437Z ^[[36m^[[2m[lint:docs]^[[0m ^[[1m$ markdownlint-cli2 'docs/content/**/*.md' '*.md' 'assets/**/*.md' 'internal/**/*.md' '.agents/skills/docs-voice/*.md' '.agents/skills/cli/*.md' '.agents/skills/codebase-standards/*.md'^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:50.4681038Z ^[[36m^[[2m[lint:docs]^[[0m markdownlint-cli2 v0.24.1 (markdownlint v0.42.1)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:50.4705914Z ^[[36m^[[2m[lint:docs]^[[0m Finding: docs/content/**/*.md *.md assets/**/*.md internal/**/*.md .agents/skills/docs-voice/*.md .agents/skills/cli/*.md .agents/skills/codebase-standards/*.md
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:50.4914365Z ^[[36m^[[2m[lint:docs]^[[0m Linting: 144 files
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:55.8070470Z ^[[36m^[[2m[lint:docs]^[[0m Summary: 0 issues in 0 files
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:55.8519737Z ^[[36m^[[2m[lint:docs]^[[0m ^[[1m$ vale docs/content *.md assets/oci/README.md internal/proxy/README.md .agents/skills/docs-voice .agents/skills/cli .agents/skills/codebase-standards^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:57.2332909Z ^[[36m^[[2m[lint:docs]^[[0m ✔ 0 errors, 0 warnings and 0 suggestions in 142 files.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:57.2530161Z ^[[36m^[[2m[lint:docs]^[[0m ^[[1m$ lychee --offline --no-progress --include-fragments 'docs/content/**/*.md'^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:58.0614626Z ^[[36m^[[2m[lint:docs]^[[0m 🔍 2308 Total (in 741ms) 🔗 661 Unique ✅ 2180 OK 🚫 0 Errors 👻 128 Excluded
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:58.0640731Z ^[[36m^[[2m[lint:docs]^[[0m 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:58.0799858Z ^[[36m^[[2m[lint:docs]^[[0m ^[[1m$ go test ./internal/msg -run '^TestDocLinks$'^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:02.5500674Z ^[[36m^[[2m[lint:docs]^[[0m ok  	github.com/devvmhq/devvm/internal/msg	0.414s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:02.5838162Z ^[[36m^[[2m[lint:docs]^[[0m ^[[1m$ go test ./internal/cli -run '^TestCommandLines$'^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:24.4850375Z ^[[36m^[[2m[lint:docs]^[[0m ok  	github.com/devvmhq/devvm/internal/cli	11.292s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:24.5059221Z ^[[36m^[[2m[lint:docs]^[[0m ^[[1m$ go test ./internal/cli/docgen -run '^TestExplainers$'^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:25.5931477Z ^[[36m^[[2m[lint:docs]^[[0m ok  	github.com/devvmhq/devvm/internal/cli/docgen	0.009s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:25.6010132Z ^[[36m^[[2m[lint:docs]^[[0m ^[[1m$ go test ./internal/cli/docgen -run '^TestUserPageProse$'^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:26.4088661Z ^[[36m^[[2m[lint:docs]^[[0m ok  	github.com/devvmhq/devvm/internal/cli/docgen	0.023s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:26.4186532Z ^[[36m^[[2m[lint:docs]^[[0m ^[[1m$ d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:44.9621408Z ^[[38;5;12m[lint:code]^[[0m 0 issues.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.0362252Z ^[[38;5;12m[lint:code]^[[0m ^[[1m$ want=$(grep -Hn '// want forbidigo$' testdata/lint/*.go | cut -d: -f1,2 | sort)^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.2942506Z ^[[36m^[[2m[lint:docs]^[[0m ok  	github.com/devvmhq/devvm/internal/cli/docgen	6.004s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.3160600Z ^[[36m^[[2m[lint:docs]^[[0m Finished in 55.05s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.3295939Z ^[[38;5;12m[lint:code]^[[0m ^[[1m$ actionlint^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.4414768Z ^[[38;5;12m[lint:code]^[[0m ^[[1m$ zizmor --offline .^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.4444186Z ^[[38;5;12m[lint:code]^[[0m ^[[32m INFO^[[0m ^[[2mzizmor^[[0m^[[2m:^[[0m 🌈 zizmor v1.32.0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.4921494Z ^[[38;5;12m[lint:code]^[[0m ^[[32m INFO^[[0m ^[[1maudit^[[0m^[[2m:^[[0m ^[[2mzizmor^[[0m^[[2m:^[[0m 🌈 completed ./.github/dependabot.yml
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.4950222Z ^[[38;5;12m[lint:code]^[[0m ^[[32m INFO^[[0m ^[[1maudit^[[0m^[[2m:^[[0m ^[[2mzizmor^[[0m^[[2m:^[[0m 🌈 completed ./.github/workflows/ci.yml
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.4951429Z ^[[38;5;12m[lint:code]^[[0m ^[[33m WARN^[[0m ^[[1maudit^[[0m^[[2m:^[[0m ^[[2mzizmor^[[0m^[[2m:^[[0m one or more inputs contains YAML anchors; see https://docs.zizmor.sh/usage/#yaml-anchors for details
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.4968008Z ^[[38;5;12m[lint:code]^[[0m ^[[32m INFO^[[0m ^[[1maudit^[[0m^[[2m:^[[0m ^[[2mzizmor^[[0m^[[2m:^[[0m 🌈 completed ./.github/workflows/docs.yml
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.4973759Z ^[[38;5;12m[lint:code]^[[0m ^[[32m INFO^[[0m ^[[1maudit^[[0m^[[2m:^[[0m ^[[2mzizmor^[[0m^[[2m:^[[0m 🌈 completed ./.github/workflows/e2e.yml
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.4990058Z ^[[38;5;12m[lint:code]^[[0m ^[[32m INFO^[[0m ^[[1maudit^[[0m^[[2m:^[[0m ^[[2mzizmor^[[0m^[[2m:^[[0m 🌈 completed ./.github/workflows/fuzz.yml
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.4995814Z ^[[38;5;12m[lint:code]^[[0m ^[[32m INFO^[[0m ^[[1maudit^[[0m^[[2m:^[[0m ^[[2mzizmor^[[0m^[[2m:^[[0m 🌈 completed ./.github/workflows/pins.yml
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.4997735Z ^[[38;5;12m[lint:code]^[[0m ^[[32m INFO^[[0m ^[[1maudit^[[0m^[[2m:^[[0m ^[[2mzizmor^[[0m^[[2m:^[[0m 🌈 completed ./.github/workflows/pr-title.yml
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.5017480Z ^[[38;5;12m[lint:code]^[[0m ^[[32m INFO^[[0m ^[[1maudit^[[0m^[[2m:^[[0m ^[[2mzizmor^[[0m^[[2m:^[[0m 🌈 completed ./.github/workflows/vuln.yml
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.5018111Z ^[[38;5;12m[lint:code]^[[0m ^[[32mNo findings to report. Good job!^[[39m (^[[1m^[[93m19^[[39m suppressed^[[0m)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.5033792Z ^[[38;5;12m[lint:code]^[[0m ^[[1m$ git ls-files --cached --others --exclude-standard -z -- . ':!:.agents/skills/security-audit' ':!:testdata/script' |^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7871520Z ^[[38;5;12m[lint:code]^[[0m Finished in 58.23s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7897680Z ^[[2mFinished in 58.24s^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7959427Z ##[group]Run mise run test
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7959824Z ^[[36;1mmise run test^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7979198Z shell: /usr/bin/bash -e {0}
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7979494Z env:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7979805Z   MISE_LOG_LEVEL: info
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7980097Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/devvm/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7980479Z   MISE_YES: 1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7980697Z   CGO_ENABLED: 0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7981006Z   GOBIN: /home/runner/.local/share/mise/installs/go/1.27.4/bin
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7981362Z   GOROOT: /home/runner/.local/share/mise/installs/go/1.27.4
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7981688Z   TZ: America/Los_Angeles
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7981962Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.8576235Z ^[[34m[test]^[[0m ^[[1m$ scripts/test.sh^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:58.4257452Z ^[[32m✓^[[0m  assets (1.385s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:21.3254601Z ^[[33m∅^[[0m  cmd/devvm (682ms) (coverage: 0.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:22.2762223Z ^[[32m✓^[[0m  internal/agents (1.035s) (coverage: 85.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:22.4520689Z ^[[32m✓^[[0m  internal/backend (1.126s) (coverage: 93.6% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:22.8732825Z ^[[32m✓^[[0m  internal/agentlogin (1.761s) (coverage: 95.4% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:23.3117534Z ^[[32m✓^[[0m  internal/backend/backendtest (1.034s) (coverage: 73.7% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:23.9002197Z ^[[32m✓^[[0m  internal/backend/registry (1.024s) (coverage: 100.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:26.0478778Z ^[[32m✓^[[0m  internal/build (2.746s) (coverage: 84.6% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:26.4101311Z ^[[32m✓^[[0m  internal/cli/docgen (1.581s) (coverage: 86.5% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:27.5860078Z ^[[32m✓^[[0m  internal/desktop (1.175s) (coverage: 79.2% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:28.6257423Z ^[[32m✓^[[0m  internal/devcontainer (1.039s) (coverage: 96.8% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:29.2263253Z ^[[32m✓^[[0m  internal/daemon (3.177s) (coverage: 98.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:29.4750404Z ^[[32m✓^[[0m  internal/backend/lima (7.022s) (coverage: 88.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:29.7187412Z ^[[32m✓^[[0m  internal/fetch (1.091s) (coverage: 96.2% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:30.3217762Z ^[[32m✓^[[0m  internal/from (1.094s) (coverage: 86.9% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:31.2578623Z ^[[32m✓^[[0m  internal/hostgit (1.538s) (coverage: 100.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:31.3979499Z ^[[32m✓^[[0m  internal/hostsafety (1.073s) (coverage: 95.9% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:32.3991057Z ^[[32m✓^[[0m  internal/image (1.14s) (coverage: 99.1% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:32.4181933Z ^[[32m✓^[[0m  internal/jsonc (1.02s) (coverage: 97.1% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:33.4138185Z ^[[32m✓^[[0m  internal/landlock (1.014s) (coverage: 62.7% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:34.0517495Z ^[[32m✓^[[0m  internal/leaktest (1.633s) (coverage: 87.5% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:34.0877059Z ^[[32m✓^[[0m  internal/gitprotect (4.61s) (coverage: 94.8% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:34.4332606Z ^[[32m✓^[[0m  internal/memnet (1.016s) (coverage: 96.8% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:36.1921819Z ^[[32m✓^[[0m  internal/msg/gen (1.758s) (coverage: 93.9% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:37.2192496Z ^[[32m✓^[[0m  internal/paths (1.026s) (coverage: 82.6% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:37.6149995Z ^[[32m✓^[[0m  internal/netpolicy (2.727s) (coverage: 90.1% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:38.9980760Z ^[[32m✓^[[0m  internal/msg (4.73s) (coverage: 24.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:39.9228267Z ^[[32m✓^[[0m  internal/ports (1.474s) (coverage: 88.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:40.3627862Z ^[[32m✓^[[0m  internal/project (1.022s) (coverage: 98.6% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:44.5104402Z ^[[32m✓^[[0m  internal/platform (6.709s) (coverage: 82.3% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:48.1909833Z ^[[32m✓^[[0m  internal/safefile (2.876s) (coverage: 94.4% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:49.0493263Z ^[[32m✓^[[0m  internal/redact (4.016s) (coverage: 99.1% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:49.2129630Z ^[[32m✓^[[0m  internal/seatbelt (1.02s) (coverage: 96.2% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:50.1934649Z ^[[32m✓^[[0m  internal/secrets (1.143s) (coverage: 92.2% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:50.3270753Z ^[[32m✓^[[0m  internal/settings (1.112s) (coverage: 95.9% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:51.7150150Z ^[[32m✓^[[0m  internal/shell (1.231s) (coverage: 100.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:52.0383751Z ^[[32m✓^[[0m  internal/sshagent (1.185s) (coverage: 85.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:53.9507318Z ^[[32m✓^[[0m  internal/sshconfig (1.411s) (coverage: 94.9% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:55.2784123Z ^[[32m✓^[[0m  internal/state (1.851s) (coverage: 92.2% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:58.9471795Z ^[[32m✓^[[0m  internal/proxy (13.919s) (coverage: 92.1% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:48:59.1413434Z ^[[32m✓^[[0m  internal/stubtest (1.494s) (coverage: 83.8% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:00.0756300Z ^[[32m✓^[[0m  internal/stubtest/stub (1.125s) (coverage: 92.1% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:00.1662895Z ^[[33m∅^[[0m  internal/testbuild (91ms) (coverage: 0.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:00.4953914Z ^[[32m✓^[[0m  internal/stubtest/stubstate (1.081s) (coverage: 93.8% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:07.3122656Z ^[[32m✓^[[0m  internal/tools (3.955s) (coverage: 89.7% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:07.7300511Z ^[[32m✓^[[0m  internal/trust (4.31s) (coverage: 95.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:08.1490895Z ^[[32m✓^[[0m  internal/structure (10.541s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:10.9552730Z ^[[32m✓^[[0m  internal/ubuntu (3.641s) (coverage: 97.3% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:10.9992310Z ^[[33m∅^[[0m  internal/upgrade/upgradetest (43ms) (coverage: 0.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:11.5910456Z ^[[32m✓^[[0m  internal/upgrade (1.536s) (coverage: 93.2% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:21.1010501Z ^[[32m✓^[[0m  internal/ui (11.59s) (coverage: 90.2% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:28.3804795Z ^[[32m✓^[[0m  internal/vmname (1.022s) (coverage: 92.5% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:30.0000441Z ^[[32m✓^[[0m  internal/vmlog (2.643s) (coverage: 96.8% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:30.0020869Z ^[[33m∅^[[0m  locales
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:31.0300115Z ^[[32m✓^[[0m  packaging (1.029s) (coverage: 71.4% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:49:41.0459864Z ^[[32m✓^[[0m  internal/vmssh (12.666s) (coverage: 90.2% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:50:44.2379920Z ^[[31m✖^[[0m  internal/vm (1m16.881s) (coverage: 80.0% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.8527896Z ^[[32m✓^[[0m  internal/cli (3m56.683s) (coverage: 50.5% of statements)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9237507Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9238415Z === ^[[33mSkipped^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9239402Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/build-image (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9240032Z     conformance.go:92: this backend's VMs don't start here: the check needs a running VM
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9240400Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9240769Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/start (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9241429Z     conformance.go:92: this backend's VMs don't start here: the check needs a running VM
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9241791Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9242112Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/confined (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9242627Z     conformance.go:92: this backend's VMs don't start here: the check needs a running VM
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9242894Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9243170Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/restart (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9243647Z     conformance.go:92: this backend's VMs don't start here: the check needs a running VM
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9243927Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9244167Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/reach (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9244646Z     conformance.go:92: this backend's VMs don't start here: the check needs a running VM
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9244914Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9245182Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/running-refused (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9245683Z     conformance.go:92: this backend's VMs don't start here: the check needs a running VM
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9245965Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9246488Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/caps (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9246932Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9247144Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9247404Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/problems (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9247842Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9248057Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9248279Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/host (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9248899Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9249205Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9249459Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/images (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9250096Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9250397Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9250685Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/delete-image (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9251225Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9251603Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9251867Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/origin (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9252460Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9252740Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9253040Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/build-image (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9253557Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9253977Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9254255Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/create (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9254752Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9255075Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9255391Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/create-refused (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9255919Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9256228Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9256567Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/inspect-missing (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9257093Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9257402Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9257690Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/stopped (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9258199Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9258654Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9258940Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/start-shrink (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9259538Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9259867Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9260124Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/proxy-url (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9260703Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9261009Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9261249Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/rename (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9261815Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9262145Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9262443Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/delete (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9262954Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9263242Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9263519Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/start (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9264042Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9264335Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9264641Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/confined (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9265155Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9265488Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9265960Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/restart (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9266533Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9266873Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9267126Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/reach (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9267577Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9267811Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9268066Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/running-refused (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9268644Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9268910Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9269196Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/usage (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9269636Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9269898Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9270086Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/strays (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9270493Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9270718Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9270968Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/caches (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9271383Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9271591Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9271833Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/guard (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9272228Z     conformance_test.go:63: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9272479Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9272698Z === ^[[33mSKIP^[[0m: internal/backend/lima TestLimactlStubContract (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9273138Z     contract_test.go:140: limactl isn't on PATH: this test runs real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9273372Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9273557Z === ^[[33mSKIP^[[0m: internal/backend/lima TestProbePin (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9274035Z     pins_test.go:275: this host limits user namespaces (apparmor)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9274293Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9274489Z === ^[[33mSKIP^[[0m: internal/backend/lima TestRunPinned (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9274893Z     pins_test.go:323: pins need a Linux host that lets devvm in a user namespace
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9275141Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9275350Z === ^[[33mSKIP^[[0m: internal/backend/lima TestLimaConfigsValid (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9275720Z     real_test.go:282: limactl isn't on PATH: these tests run real Lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9275952Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9276164Z === ^[[33mSKIP^[[0m: internal/backend/registry TestE2EExecQuoting (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9276505Z     e2e_test.go:27: tests/e2e runs it, on a VM of its own
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9276753Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9276954Z === ^[[33mSKIP^[[0m: internal/cli TestScript/fixture_v010_strict (0.02s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9277285Z     cmd.go:380: 0.1.0 locked .git on macOS only
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9277576Z     testscript.go:609: WORK=$WORK
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9281297Z         PATH=/tmp/TestScript1707560951/001:/tmp/devvm-stubs-70aaed0caf03915d:/home/runner/.local/share/mise/installs/go/1.27.4/bin:/home/runner/.local/share/mise/installs/go/1.27.4/bin:/home/runner/.local/share/mise/installs/golangci-lint/2.15.0/golangci-lint-2.15.0-linux-amd64:/home/runner/.local/share/mise/installs/gotestsum/1.13.0:/home/runner/.local/share/mise/installs/go-golang-org-x-vuln-cmd-govulncheck/1.10.0/bin:/home/runner/.local/share/mise/installs/go-go-uber-org-nilaway-cmd-nilaway/0.0.0-20261112030514-ccd005690d1e/bin:/home/runner/.local/share/mise/installs/goreleaser/2.20.2:/home/runner/.local/share/mise/installs/hugo/0.170.1:/home/runner/.local/share/mise/installs/vale/3.27.0:/home/runner/.local/share/mise/installs/lychee/0.24.2/.mise-bins:/home/runner/.local/share/mise/installs/node/24.22.3/bin:/home/runner/.local/share/mise/installs/markdownlint-cli2/0.24.1~aube~d90c28a31b70d972/node_modules/.bin:/home/runner/.local/share/mise/installs/shellcheck/0.11.0/shellcheck-v0.11.0:/home/runner/.local/share/mise/installs/actionlint/1.7.12:/home/runner/.local/share/mise/installs/zizmor/1.32.0:/home/runner/.local/share/mise/installs/minisign/0.12/minisign-linux/x86_64:/home/runner/.local/share/mise/shims:/home/runner/.local/share/mise/bin:/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9285062Z         GOTRACEBACK=system
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9285309Z         HOME=/tmp/dvt.288771820/home
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9285612Z         TMPDIR=$WORK/.tmp
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9285868Z         devnull=/dev/null
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9287232Z         /=/
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9287495Z         :=:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9287724Z         $=$
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9288100Z         GOCOVERDIR=/tmp/devvm-test.IV2aaQ/coverage/cli/script.502032218
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9288733Z         exe=
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9289084Z         XDG_DATA_HOME=/tmp/dvt.288771820/data
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9289465Z         XDG_CONFIG_HOME=/tmp/dvt.288771820/config
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9289830Z         DEVVM_LIMA_HOME=/tmp/dvt.288771820/lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9290211Z         LIMA_HOME=/tmp/dvt.288771820/lima
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9290566Z         STUB_DIR=/tmp/dvt.288771820/stub
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9290907Z         STUB_LOG=/tmp/dvt.288771820/stub/calls
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9291245Z         DEVVM_MESSAGES=names
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9291589Z         RUN=/tmp/dvt.288771820/data/devvm/run
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9291935Z         CFG=/tmp/dvt.288771820/config/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9292336Z         DATA=/tmp/dvt.288771820/data/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9292747Z         VMS=/tmp/dvt.288771820/data/devvm/vms
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9293167Z         DEVVM_UBUNTU_URL=file:///tmp/dvt.288771820/ubuntu
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9293563Z         DEVVM_KVM=/tmp/dvt.288771820/stub/kvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9293925Z         DEVVM_PINS=this host's kernel refused
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9294313Z         SANDBOX_PORT_NEXT=18497
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9294618Z         SANDBOX_PORT_END=18540
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9294973Z         DEVVM_PORT_RANGE=18540-18639
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9295475Z         DEVVM_SSH_PORTS=18480,18481,18482,18483,18484,18485,18486,18487,18488,18489,18490,18491,18492,18493,18494,18495,18496
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9295933Z         DEVVM_SECRET_SERVICE=devvm-test
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9296268Z         DEVVM_NO_RELEASE_CHECK=1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9296525Z         DEVVM_TEST_CPUS=8
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9296838Z         DEVVM_TEST_MEMORY_GIB=16
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9297094Z         DEVVM_TEST_FREE_GIB=500
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9297350Z         DEVVM_TEST_LIST_TIMEOUT=10m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9297679Z         TOOLCHAINS=node python rust go dotnet
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9297960Z         AGENTS=claude codex opencode pi cursor
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9298337Z         AGENT_CHOICES=claude, codex, opencode, pi, cursor
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9298839Z         LOGIN_AGENTS=claude, codex, opencode, pi, cursor
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9299147Z         KEY_AGENTS=opencode, pi
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9299469Z         DEVVM_HOST_MISE=/tmp/devvm-stubs-70aaed0caf03915d/mise
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9299810Z         DEVVM_CLIP_TOOLS=/tmp/devvm-stubs-70aaed0caf03915d
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9300214Z         MISE_STUB_LOCK=/home/runner/work/devvm/devvm/testdata/mise.lock
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9300540Z         DEVVM_BIN=/tmp/TestScript1707560951/001
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9300849Z         DEVVM_REPO=/home/runner/work/devvm/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9301155Z         GIT_CONFIG_NOSYSTEM=1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9301420Z         
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9301726Z         # devvm 0.1.0's app VM (testdata/v0.1.0/darwin: see fixture_v010.txtar)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9302116Z         # as 0.1.0's devvm git-protect strict would have left it on macOS, the
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9302490Z         # one host where 0.1.0 locked .git: its mode strict, and
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9303060Z         # diff.ignoreSubmodules = all in .git/config. It reads as on, its next
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9303500Z         # launch takes strict's all out, .git/config unlocked for the edit and
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9303912Z         # locked again before the VM starts, and says so once. (0.021s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9304266Z         > [!darwin] skip '0.1.0 locked .git on macOS only'
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9304537Z         
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9304687Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9305399Z === ^[[33mSKIP^[[0m: internal/cli/docgen TestNoThirdPartyLoads (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9305842Z     site_test.go:165: DOCS_SITE isn't set: mise run lint:docs builds the site and runs this test on it
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9306145Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9306322Z === ^[[33mSKIP^[[0m: internal/desktop TestE2EDesktop (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9306666Z     e2e_test.go:20: tests/e2e runs it, on a VM of its own
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9306937Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9307146Z === ^[[33mSKIP^[[0m: internal/gitprotect TestRealLocks (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9307478Z     gitprotect_test.go:665: chflags is macOS's
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9307668Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9307847Z === ^[[33mSKIP^[[0m: internal/gitprotect TestNestedNotGone/.GIT (0.01s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9308215Z     nested_test.go:326: names don't fold case here
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9308414Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9308900Z === ^[[33mSKIP^[[0m: internal/landlock TestSelf (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9309370Z     self_linux_test.go:126: a build with cgo, whose threads Go can't reach: run with CGO_ENABLED=0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9309695Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9309898Z === ^[[33mSKIP^[[0m: internal/netpolicy TestE2ESelfCheck (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9310258Z     e2e_test.go:26: tests/e2e runs it, on a VM of its own
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9310417Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9310624Z === ^[[33mSKIP^[[0m: internal/netpolicy TestLocalProxy (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9311030Z     localproxy_test.go:139: no socat: exec: "socat": executable file not found in $PATH
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9311305Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9311487Z === ^[[33mSKIP^[[0m: internal/platform TestLockHolder (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9311812Z     lock_test.go:323: run by TestLockFileKilled
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9312006Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9312191Z === ^[[33mSKIP^[[0m: internal/platform TestPinsInNamespace (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9312586Z     pin_test.go:231: pins need a Linux host that lets devvm in a user namespace
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9312844Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9313039Z === ^[[33mSKIP^[[0m: internal/platform TestPinWhileRenamed (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9313422Z     pin_test.go:290: pins need a Linux host that lets devvm in a user namespace
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9313662Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9313860Z === ^[[33mSKIP^[[0m: internal/project TestUnsafeIgnoresCase (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9314212Z     project_test.go:277: this volume tells names apart by case
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9314442Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9314639Z === ^[[33mSKIP^[[0m: internal/sshagent TestMountedKeyIgnoresCase (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9315021Z     sshagent_test.go:364: this volume tells names apart by case
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9315264Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9315418Z === ^[[33mSKIP^[[0m: internal/tools TestShareHolder (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9315755Z     tools_test.go:1120: run by TestLockShareKilled
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9315910Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9316146Z === ^[[33mSKIP^[[0m: internal/vm TestAgentImportRefusedOtherCase (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9316543Z     agentlinks_test.go:620: this file system counts case
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9316722Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9316908Z === ^[[33mSKIP^[[0m: internal/vm TestAgentSaveCaseOnly (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9317286Z     agentstore_test.go:537: this volume tells names that differ only in case apart
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9317541Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9317735Z === ^[[33mSKIP^[[0m: internal/vm TestAgentSaveCaseOnlyHardLink (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9318165Z     agentstore_test.go:577: this volume tells names that differ only in case apart
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9318428Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9318793Z === ^[[33mSKIP^[[0m: internal/vm TestAgentSaveNamesCollide (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9319337Z     agentstore_test.go:604: this volume tells names that differ only in case apart
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9319588Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9319787Z === ^[[33mSKIP^[[0m: internal/vm TestAgentImportCaseOnly (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9320164Z     agentstore_test.go:636: this volume tells names that differ only in case apart
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9320445Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9320625Z === ^[[33mSKIP^[[0m: internal/vm TestAgentImportNamesCollide (0.00s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9321030Z     agentstore_test.go:656: this volume tells names that differ only in case apart
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9321302Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9321406Z === ^[[31mFailed^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9321737Z === ^[[31mFAIL^[[0m: internal/vm TestAgentImportFailsWhole (0.01s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9322130Z     agentimport_test.go:957: changed: 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9323082Z     agentimport_test.go:963: changed true: the store has [".claude" ".claude/CLAUDE.md=another" ".claude/skills" ".claude/skills/a.md=a"], want [".claude" ".claude/CLAUDE.md=old" ".claude/skills" ".claude/skills/old.md=old"]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9323765Z 
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9323954Z DONE 4183 tests, 55 skipped, 1 failure in 263.817s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9555960Z ^[[34m[test]^[[0m ^[[31mERROR^[[0m task failed
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9584442Z ##[error]Process completed with exit code 1.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9699929Z Post job cleanup.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.1179870Z Post job cleanup.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.1826727Z [command]/usr/bin/git version
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.1864717Z git version 2.56.1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.1893978Z Temporarily overriding HOME='/home/runner/work/_temp/fb1b2309-0ae0-4c3a-8b82-c64fcb983233' before making global git config changes
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.1894962Z Adding repository directory to the temporary git global config as a safe directory
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.1898376Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/devvm/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.1925689Z Removing SSH command configuration
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.1930740Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.1958861Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.2183851Z Removing HTTP extra header
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.2188113Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.2212344Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.2404753Z Removing includeIf entries pointing to credentials config files
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.2408080Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.2430046Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.2737413Z Cleaning up orphan processes

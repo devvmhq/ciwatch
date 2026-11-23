@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/devvmhq/ciwatch/internal/gh"
+	"github.com/devvmhq/ciwatch/internal/steplog"
 	"github.com/devvmhq/ciwatch/internal/testlog"
 )
 
@@ -25,10 +26,12 @@ const (
 	ExitUnchecked = 4
 )
 
-const usage = `usage: ciwatch [--json] [--once] [--follow] <commit>
+const usage = `usage: ciwatch [--json] [--once] [--follow] [--go-tests] <commit>
 
 Watches every GitHub Actions run for a commit until it finishes. A run that a
 newer push cancelled is named; with --follow, that commit is watched instead.
+A failed job shows the last lines of each failed step; with --go-tests, it
+also shows the failing Go tests found in its log.
 `
 
 // MaxFollowed is the most commits --follow moves on from before it stops.
@@ -127,8 +130,8 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	for i, r := range runs {
 		withJobs[i].Run = r
 		withJobs[i].SupersededBy = newer[r.ID]
-		jobs, err := retry(ctx, jobsApp, stderr, fmt.Sprintf("gh run view %d", r.ID), func() ([]gh.Job, error) {
-			return a.GH.RunJobs(ctx, r.ID)
+		jobs, err := retry(ctx, jobsApp, stderr, fmt.Sprintf("gh run view %d", r.ID), func() ([]gh.JobSteps, error) {
+			return a.GH.RunJobsWithSteps(ctx, r.ID)
 		})
 		if err != nil && ctx.Err() != nil { // Ctrl-C: no partial table, and no warning per remaining run
 			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
@@ -146,17 +149,17 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		}
 		withJobs[i].Jobs = make([]jobResult, len(jobs))
 		for k, j := range jobs {
-			withJobs[i].Jobs[k] = jobResult{Job: j, Failed: r.Status == "completed" && (j.Conclusion == "failure" || j.Conclusion == "timed_out")}
+			withJobs[i].Jobs[k] = jobResult{Job: j.Job, Ran: j.Steps, Failed: r.Status == "completed" && (j.Conclusion == "failure" || j.Conclusion == "timed_out")}
 		}
 		jobsApp.Retries = a.Retries // a call got through, so the network is back: full retries again
 	}
 
-	if err := a.failingTests(ctx, withJobs, stderr); err != nil { // Ctrl-C: no partial table
+	if err := a.failedLogs(ctx, withJobs, opts.goTests, stderr); err != nil { // Ctrl-C: no partial table
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 		return ExitUnchecked
 	}
 
-	report := buildReport(sha, followed, withJobs)
+	report := buildReport(sha, followed, withJobs, opts.goTests)
 	if opts.json {
 		err = report.WriteJSON(stdout)
 	} else {
@@ -194,18 +197,60 @@ type runWithJobs struct {
 	SupersededBy string // the commit whose push cancelled the run, if one did
 }
 
-// jobResult is a job and, if it failed in a completed run, its failing tests.
-// TestsErr says why they couldn't be fetched; Tests is then empty.
+// jobResult is a job and, if it failed in a completed run, the end of its
+// failed steps' logs, and with --go-tests its failing tests. LogErr says why
+// the log couldn't be fetched; Steps and Tests are then empty.
 type jobResult struct {
 	gh.Job
-	Failed   bool // the job failed in a completed run, so its log was fetched
-	Tests    []testlog.Failure
-	TestsErr string
+	Ran    []gh.Step // the job's steps, from the jobs JSON
+	Failed bool      // the job failed in a completed run, so its log was fetched
+	Steps  []steplog.Step
+	Tests  []testlog.Failure
+	LogErr string
 }
 
-// failingTests fetches the failed-step log of each failed job and parses it,
+// jobLogName names the lines of a failed job that has no failed step.
+const jobLogName = "(job log)"
+
+// failedSpans is when each failed step of a job ran.
+func failedSpans(steps []gh.Step) []steplog.Span {
+	var spans []steplog.Span
+	for _, s := range steps {
+		if s.Conclusion == "failure" {
+			spans = append(spans, steplog.Span{Name: s.Name, Started: s.Started, Completed: s.Completed})
+		}
+	}
+	return spans
+}
+
+// readLog finds the end of the failed steps in log, and with goTests the
+// failing tests.
+func readLog(j jobResult, log []byte, goTests bool) (steps []steplog.Step, tests []testlog.Failure, err error) {
+	if spans := failedSpans(j.Ran); len(spans) > 0 {
+		steps, err = steplog.Parse(bytes.NewReader(log), spans)
+	} else {
+		var whole steplog.Step
+		if whole, err = steplog.Whole(bytes.NewReader(log)); err == nil && len(whole.Lines) > 0 {
+			whole.Name = jobLogName
+			steps = []steplog.Step{whole}
+		}
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if goTests {
+		var res testlog.Result
+		if res, err = testlog.Parse(bytes.NewReader(log)); err != nil {
+			return nil, nil, err
+		}
+		tests = res.Failures
+	}
+	return steps, tests, nil
+}
+
+// failedLogs fetches the failed-step log of each failed job and reads it,
 // retrying like the jobs fetch. It returns an error only when ctx is cancelled.
-func (a App) failingTests(ctx context.Context, runs []runWithJobs, stderr io.Writer) error {
+func (a App) failedLogs(ctx context.Context, runs []runWithJobs, goTests bool, stderr io.Writer) error {
 	logApp := a
 	for i, r := range runs {
 		for k, j := range r.Jobs {
@@ -219,16 +264,18 @@ func (a App) failingTests(ctx context.Context, runs []runWithJobs, stderr io.Wri
 				return err
 			}
 			if err == nil {
-				var res testlog.Result
-				if res, err = testlog.Parse(bytes.NewReader(log)); err == nil {
-					runs[i].Jobs[k].Tests = res.Failures
+				var steps []steplog.Step
+				var tests []testlog.Failure
+				if steps, tests, err = readLog(j, log, goTests); err == nil {
+					runs[i].Jobs[k].Steps = steps
+					runs[i].Jobs[k].Tests = tests
 					logApp.Retries = a.Retries // a call got through, so the network is back
 					continue
 				}
 				err = fmt.Errorf("reading the log of job %d: %w", j.ID, err)
 			}
-			_, _ = fmt.Fprintf(stderr, "ciwatch: can't fetch failing tests for job %d (%s) of run %d (%s): %v\n", j.ID, j.Name, r.ID, r.Workflow, err)
-			runs[i].Jobs[k].TestsErr = err.Error()
+			_, _ = fmt.Fprintf(stderr, "ciwatch: can't fetch the log of job %d (%s) of run %d (%s): %v\n", j.ID, j.Name, r.ID, r.Workflow, err)
+			runs[i].Jobs[k].LogErr = err.Error()
 			if errors.Is(err, gh.ErrNetwork) || errors.Is(err, gh.ErrTemporary) {
 				logApp.Retries = 0 // as for jobs: the network is likely still down
 			}
@@ -240,13 +287,14 @@ func (a App) failingTests(ctx context.Context, runs []runWithJobs, stderr io.Wri
 var errUsage = errors.New("usage")
 
 type options struct {
-	commit string
-	json   bool
-	once   bool
-	follow bool
+	commit  string
+	json    bool
+	once    bool
+	follow  bool
+	goTests bool
 }
 
-// parseArgs accepts --json, --once, --follow and one commit, in any order.
+// parseArgs accepts --json, --once, --follow, --go-tests and one commit, in any order.
 func parseArgs(args []string) (options, error) {
 	var o options
 	fs := flag.NewFlagSet("ciwatch", flag.ContinueOnError)
@@ -254,6 +302,7 @@ func parseArgs(args []string) (options, error) {
 	fs.BoolVar(&o.json, "json", false, "")
 	fs.BoolVar(&o.once, "once", false, "")
 	fs.BoolVar(&o.follow, "follow", false, "")
+	fs.BoolVar(&o.goTests, "go-tests", false, "")
 	var positional []string
 	for {
 		if err := fs.Parse(args); err != nil {

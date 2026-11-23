@@ -1,0 +1,6 @@
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:46:49.1000000Z ##[group]Run mise run lint
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.0000000Z ##[group]Run mise run test
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9000000Z === ^[[31mFAIL^[[0m: internal/vm TestAgentImportFailsWhole (0.01s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9100000Z     agentimport_test.go:957: changed:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9584442Z ##[error]Process completed with exit code 1.
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:21.2408080Z Cleaning up orphan processes

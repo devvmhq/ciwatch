@@ -1378,10 +1378,10 @@ type failingTest struct {
 
 // jsonJobs runs ciwatch --json and returns the jobs of every run, by job id, as
 // raw keys so a missing key can be told from an empty one.
-func jsonJobs(t *testing.T, app cli.App, wantCode int) (map[string]map[string]json.RawMessage, string) {
+func jsonJobs(t *testing.T, app cli.App, wantCode int, flags ...string) (map[string]map[string]json.RawMessage, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if code := app.Run(t.Context(), []string{"--json", "HEAD"}, &stdout, &stderr); code != wantCode {
+	if code := app.Run(t.Context(), append([]string{"--json"}, append(flags, "HEAD")...), &stdout, &stderr); code != wantCode {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, wantCode, stderr.String())
 	}
 	var got struct {
@@ -1417,7 +1417,7 @@ func jsonTests(t *testing.T, job map[string]json.RawMessage) []failingTest {
 func TestRunShowsFailingTestsInTable(t *testing.T) {
 	app, _ := fakeWith(t, "run-list-test-failure.json", nil, nil, failingTestsOpts("gotestsum-failures.log"))
 	var stdout, stderr bytes.Buffer
-	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+	if code := app.Run(t.Context(), []string{"--go-tests", "HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
 	}
 	out := stdout.String()
@@ -1439,6 +1439,8 @@ func TestRunShowsFailingTestsInTable(t *testing.T) {
 			t.Errorf("block = %q, want it to contain %q", blocks, s)
 		}
 	}
+	// The log's lines are outside the failed step's window in the jobs JSON, so
+	// no step's lines show: only the Go parser's failing tests do.
 	for _, s := range []string{"DONE 4183", "SKIP", "##[error]", "TestAgentImportCaseOnly"} {
 		if strings.Contains(out, s) {
 			t.Errorf("stdout = %q, want it to leave out %q", out, s)
@@ -1448,7 +1450,7 @@ func TestRunShowsFailingTestsInTable(t *testing.T) {
 
 func TestRunJSONHasFailingTests(t *testing.T) {
 	app, _ := fakeWith(t, "run-list-test-failure.json", nil, nil, failingTestsOpts("gotestsum-failures.log"))
-	jobs, _ := jsonJobs(t, app, cli.ExitFailed)
+	jobs, _ := jsonJobs(t, app, cli.ExitFailed, "--go-tests")
 	tests := jsonTests(t, jobs[failedJob])
 	if len(tests) != 1 {
 		t.Fatalf("tests = %+v, want 1", tests)
@@ -1468,8 +1470,8 @@ func TestRunJSONHasFailingTests(t *testing.T) {
 		if _, ok := j["tests"]; ok && id != failedJob {
 			t.Errorf("job %s has a tests key, want none for a job that didn't fail", id)
 		}
-		if _, ok := j["tests_error"]; ok {
-			t.Errorf("job %s has tests_error: %s", id, j["tests_error"])
+		if _, ok := j["log_error"]; ok {
+			t.Errorf("job %s has log_error: %s", id, j["log_error"])
 		}
 	}
 }
@@ -1522,28 +1524,313 @@ func TestOnceSkipsLogsOfRunsInProgress(t *testing.T) {
 	}
 }
 
-func TestRunNoFailingTestsFound(t *testing.T) {
-	opts := failingTestsOpts("gotestsum-pass.log")
-	app, _ := fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
+// TestRunNoFailedStepInTheLog covers AC-7: the job's failed step has no line in
+// its window, either because the log is empty or because its lines are from
+// another time.
+func TestRunNoFailedStepInTheLog(t *testing.T) {
+	tests := []struct {
+		name string
+		opts fakeOpts
+	}{
+		{"AC-7 the lines are outside the step's window", failingTestsOpts("gotestsum-pass.log")},
+		{"AC-7 an empty log", fakeOpts{viewFixture: map[string]string{failedRun: "run-view-44707997310-test-failure.json"}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app, _ := fakeWith(t, "run-list-test-failure.json", nil, nil, tt.opts)
+			var stdout, stderr bytes.Buffer
+			if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+				t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), failedJobName+" (CI, run "+failedRun+"):\n  (no failed step in the log)") {
+				t.Errorf("stdout = %q, want the job's block to say (no failed step in the log)", stdout.String())
+			}
+			app, _ = fakeWith(t, "run-list-test-failure.json", nil, nil, tt.opts)
+			jobs, _ := jsonJobs(t, app, cli.ExitFailed)
+			if raw, ok := jobs[failedJob]["steps"]; !ok || string(raw) != "[]" {
+				t.Errorf("steps = %s (present %v), want []", raw, ok)
+			}
+			if _, ok := jobs[failedJob]["tests"]; ok {
+				t.Errorf("job has tests %s, want none without --go-tests", jobs[failedJob]["tests"])
+			}
+		})
+	}
+}
+
+// step is one entry of a job's "steps" in --json.
+type step struct {
+	Name    string   `json:"name"`
+	Lines   []string `json:"lines"`
+	Omitted int      `json:"omitted"`
+}
+
+func jsonSteps(t *testing.T, job map[string]json.RawMessage) []step {
+	t.Helper()
+	raw, ok := job["steps"]
+	if !ok {
+		t.Fatalf("job %s has no steps key", job["id"])
+	}
+	var steps []step
+	if err := json.Unmarshal(raw, &steps); err != nil {
+		t.Fatal(err)
+	}
+	return steps
+}
+
+const (
+	devvmRun  = "44705166834"
+	devvmJob  = "136182840710"
+	devvmList = "run-list-devvm-failure.json"
+)
+
+// devvmOpts is the fake gh for the recorded CI run of devvmhq/devvm whose
+// ubuntu job's "Run mise run test" step failed, printing log.
+func devvmOpts(log string) fakeOpts {
+	return fakeOpts{logFixture: map[string]string{devvmJob: log}}
+}
+
+// TestRunShowsFailedStepTail covers AC-1 and AC-3.
+func TestRunShowsFailedStepTail(t *testing.T) {
+	app, calls := fakeWith(t, devvmList, nil, nil, devvmOpts("devvm-44705166834.log"))
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), failedJobName+" (CI, run "+failedRun+"):\n  (no failing tests found in the log)") {
-		t.Errorf("stdout = %q, want the job's block to say (no failing tests found in the log)", stdout.String())
+	if want := []string{devvmJob}; !reflect.DeepEqual(calls.logIDs, want) {
+		t.Errorf("logs fetched for jobs %v, want exactly %v", calls.logIDs, want)
 	}
-	app, _ = fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
+	out := stdout.String()
+	_, block, ok := strings.Cut(out, "\n\n")
+	if !ok {
+		t.Fatalf("stdout = %q, want the table, a blank line and a block", out)
+	}
+	if want := failedJobName + " (CI, run " + devvmRun + "):\n  Run mise run test:\n"; !strings.HasPrefix(block, want) {
+		t.Errorf("block = %q, want it to start with %q", block, want)
+	}
+	if want := "    ##[error]Process completed with exit code 1.\n"; !strings.HasSuffix(block, want) {
+		t.Errorf("block = %q, want it to end with %q", block, want)
+	}
+	for _, s := range []string{
+		"\n    === FAIL: internal/vm TestAgentImportFailsWhole (0.01s)\n",
+		"\n        agentimport_test.go:957: changed:",
+		"\n        agentimport_test.go:963: changed true: the store has",
+		"\n    DONE 4183 tests, 55 skipped, 1 failure in 263.817s\n",
+	} {
+		if !strings.Contains(block, s) {
+			t.Errorf("block = %q, want it to contain %q", block, s)
+		}
+	}
+	// Nothing from the steps that passed or ran after, and nothing of gh's
+	// prefix, the timestamps or the colour codes.
+	for _, s := range []string{
+		"Post job cleanup", "Cleaning up orphan processes", "Runner Image", "actions/checkout", "mise run lint",
+		"UNKNOWN STEP", "2026-11-20T", "^[[", "\x1b[", "\r", "  FAIL ",
+	} {
+		if strings.Contains(block, s) {
+			t.Errorf("block = %q, want it to leave out %q", block, s)
+		}
+	}
+	if strings.Count(out, "\n\n") != 1 {
+		t.Errorf("stdout = %q, want one block", out)
+	}
+}
+
+// TestRunStepOmittedLines covers AC-2: the table and --json show the same last
+// 40 lines and the count of the lines before them.
+func TestRunStepOmittedLines(t *testing.T) {
+	opts := devvmOpts("devvm-44705166834.log")
+	app, _ := fakeWith(t, devvmList, nil, nil, opts)
 	jobs, _ := jsonJobs(t, app, cli.ExitFailed)
-	if raw, ok := jobs[failedJob]["tests"]; !ok || string(raw) != "[]" {
-		t.Errorf("tests = %s (present %v), want []", raw, ok)
+	steps := jsonSteps(t, jobs[devvmJob])
+	if len(steps) != 1 || steps[0].Name != "Run mise run test" || len(steps[0].Lines) != 40 || steps[0].Omitted <= 0 {
+		t.Fatalf("steps = %+v, want one step, Run mise run test, with 40 lines and some omitted", steps)
 	}
+	lines := steps[0].Lines
+	if last := lines[len(lines)-1]; last != "##[error]Process completed with exit code 1." {
+		t.Errorf("last line = %q, want the ##[error] line", last)
+	}
+	if _, ok := jobs[devvmJob]["tests"]; ok {
+		t.Errorf("job has tests %s, want none without --go-tests", jobs[devvmJob]["tests"])
+	}
+
+	app, _ = fakeWith(t, devvmList, nil, nil, opts)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	want := fmt.Sprintf("  Run mise run test:\n    … %d earlier lines\n", steps[0].Omitted)
+	for _, l := range lines {
+		want += "    " + l + "\n"
+	}
+	if !strings.HasSuffix(stdout.String(), want) {
+		t.Errorf("stdout = %q, want it to end with %q", stdout.String(), want)
+	}
+}
+
+// TestRunStepWithFewLinesOmitsNone covers AC-2: a step of 40 lines or fewer has
+// no earlier-lines note and omitted is 0.
+func TestRunStepWithFewLinesOmitsNone(t *testing.T) {
+	opts := devvmOpts("devvm-short-step.log")
+	app, _ := fakeWith(t, devvmList, nil, nil, opts)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	want := "\n" + failedJobName + " (CI, run " + devvmRun + "):\n  Run mise run test:\n" +
+		"    ##[group]Run mise run test\n" +
+		"    === FAIL: internal/vm TestAgentImportFailsWhole (0.01s)\n" +
+		"        agentimport_test.go:957: changed:\n" +
+		"    ##[error]Process completed with exit code 1.\n"
+	if !strings.HasSuffix(stdout.String(), want) {
+		t.Errorf("stdout = %q, want it to end with %q", stdout.String(), want)
+	}
+	if strings.Contains(stdout.String(), "earlier line") {
+		t.Errorf("stdout = %q, want no earlier-lines note", stdout.String())
+	}
+	app, _ = fakeWith(t, devvmList, nil, nil, opts)
+	jobs, _ := jsonJobs(t, app, cli.ExitFailed)
+	steps := jsonSteps(t, jobs[devvmJob])
+	if len(steps) != 1 || len(steps[0].Lines) != 4 || !strings.Contains(string(jobs[devvmJob]["steps"]), `"omitted":0`) {
+		t.Errorf("steps = %s, want one step of 4 lines with omitted 0", jobs[devvmJob]["steps"])
+	}
+}
+
+// TestRunFailedJobWithoutFailedStepShowsJobLog covers AC-8: a failed job whose
+// jobs JSON has no failed step shows the end of the whole log.
+func TestRunFailedJobWithoutFailedStepShowsJobLog(t *testing.T) {
+	opts := devvmOpts("devvm-44705166834.log")
+	opts.viewFixture = map[string]string{devvmRun: "run-view-44705166834-no-failed-step.json"}
+	app, _ := fakeWith(t, devvmList, nil, nil, opts)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	_, block, _ := strings.Cut(stdout.String(), "\n\n")
+	if want := failedJobName + " (CI, run " + devvmRun + "):\n  (job log):\n    … 677 earlier lines\n"; !strings.HasPrefix(block, want) {
+		t.Errorf("block = %q, want it to start with %q", block, want)
+	}
+	if want := "    Cleaning up orphan processes\n"; !strings.HasSuffix(block, want) {
+		t.Errorf("block = %q, want it to end with %q", block, want)
+	}
+	if strings.Contains(block, "no failed step") || strings.Contains(block, "UNKNOWN STEP") {
+		t.Errorf("block = %q, want the log's lines only", block)
+	}
+	app, _ = fakeWith(t, devvmList, nil, nil, opts)
+	jobs, _ := jsonJobs(t, app, cli.ExitFailed)
+	steps := jsonSteps(t, jobs[devvmJob])
+	if len(steps) != 1 || steps[0].Name != "(job log)" || len(steps[0].Lines) != 40 || steps[0].Omitted != 677 {
+		t.Errorf("steps = %s, want one step, (job log), with 40 lines and 677 omitted", jobs[devvmJob]["steps"])
+	}
+}
+
+// TestRunNonGoStep covers AC-4: the failed step of an npm project's job, from
+// a log recorded from expressjs/express.
+func TestRunNonGoStep(t *testing.T) {
+	const run, job, name = "44581271038", "135762241698", "Node.js 17 - windows-latest"
+	opts := fakeOpts{logFixture: map[string]string{job: "npm-test-failure.log"}}
+	app, _ := fakeWith(t, "run-list-npm-failure.json", nil, nil, opts)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	out := stdout.String()
+	_, rest, _ := strings.Cut(out, "\n"+name+" (legacy, run "+run+"):\n")
+	if !strings.HasPrefix(rest, "  Run tests:\n") {
+		t.Fatalf("stdout = %q, want the block of job %q to start with its step, Run tests", out, name)
+	}
+	block, _, _ := strings.Cut(rest, "\n\n")
+	if want := "    ##[error]Process completed with exit code 9.\n"; !strings.HasSuffix(block+"\n", want) {
+		t.Errorf("block = %q, want it to end with %q", block, want)
+	}
+	for _, s := range []string{"TypeError: Cannot read properties of undefined (reading 'router')", "test\\app.listRoutes.js:271:43"} {
+		if !strings.Contains(block, s) {
+			t.Errorf("block = %q, want it to contain %q", block, s)
+		}
+	}
+	for _, s := range []string{"UNKNOWN STEP", "2026-11-19T", "^[["} {
+		if strings.Contains(block, s) {
+			t.Errorf("block = %q, want it to leave out %q", block, s)
+		}
+	}
+	if strings.Contains(out, "  FAIL ") {
+		t.Errorf("stdout = %q, want no FAIL block", out)
+	}
+
+	app, _ = fakeWith(t, "run-list-npm-failure.json", nil, nil, opts)
+	jobs, _ := jsonJobs(t, app, cli.ExitFailed)
+	steps := jsonSteps(t, jobs[job])
+	if len(steps) != 1 || steps[0].Name != "Run tests" || len(steps[0].Lines) == 0 || len(steps[0].Lines) > 40 {
+		t.Errorf("steps = %+v, want the one step Run tests with up to 40 lines", steps)
+	}
+	if _, ok := jobs[job]["tests"]; ok {
+		t.Errorf("job has tests %s, want no tests key", jobs[job]["tests"])
+	}
+}
+
+// TestRunGoTestsFlag covers AC-5.
+func TestRunGoTestsFlag(t *testing.T) {
+	opts := failingTestsOpts("gotestsum-failures.log")
+	t.Run("AC-5 with --go-tests the failing tests are added", func(t *testing.T) {
+		app, _ := fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
+		jobs, _ := jsonJobs(t, app, cli.ExitFailed, "--go-tests")
+		tests := jsonTests(t, jobs[failedJob])
+		if len(tests) != 1 || tests[0].Name != "TestAgentImportFailsWhole" {
+			t.Errorf("tests = %+v, want TestAgentImportFailsWhole", tests)
+		}
+		if _, ok := jobs[failedJob]["steps"]; !ok {
+			t.Error("job has no steps key, want steps and tests both")
+		}
+		app, _ = fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
+		var stdout, stderr bytes.Buffer
+		if code := app.Run(t.Context(), []string{"--go-tests", "HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+			t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "  FAIL internal/vm TestAgentImportFailsWhole\n") {
+			t.Errorf("stdout = %q, want the FAIL header", stdout.String())
+		}
+	})
+	t.Run("AC-5 without it there are no tests and no FAIL block", func(t *testing.T) {
+		app, _ := fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
+		jobs, _ := jsonJobs(t, app, cli.ExitFailed)
+		if raw, ok := jobs[failedJob]["tests"]; ok {
+			t.Errorf("job has tests %s, want no tests key without --go-tests", raw)
+		}
+		app, _ = fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
+		var stdout, stderr bytes.Buffer
+		if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+			t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+		}
+		if strings.Contains(stdout.String(), "  FAIL ") || strings.Contains(stdout.String(), "TestAgentImportFailsWhole") {
+			t.Errorf("stdout = %q, want no FAIL block", stdout.String())
+		}
+	})
+	t.Run("AC-5 the tests follow the steps", func(t *testing.T) {
+		app, _ := fakeWith(t, devvmList, nil, nil, devvmOpts("devvm-44705166834.log"))
+		var stdout, stderr bytes.Buffer
+		if code := app.Run(t.Context(), []string{"--go-tests", "HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+			t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+		}
+		out := stdout.String()
+		stepAt := strings.Index(out, "  Run mise run test:\n")
+		testAt := strings.Index(out, "  FAIL internal/vm TestAgentImportFailsWhole\n")
+		if stepAt < 0 || testAt < stepAt {
+			t.Errorf("stdout = %q, want the step at %d before the FAIL block at %d", out, stepAt, testAt)
+		}
+	})
+	t.Run("AC-5 the usage names the flag", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		cli.App{}.Run(t.Context(), nil, &stdout, &stderr)
+		if !strings.Contains(stderr.String(), "--go-tests") {
+			t.Errorf("stderr = %q, want the usage to name --go-tests", stderr.String())
+		}
+	})
 }
 
 func TestRunCrashNamesRunningTest(t *testing.T) {
 	opts := failingTestsOpts("gotest-verbose-crash.log")
 	app, _ := fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
 	var stdout, stderr bytes.Buffer
-	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+	if code := app.Run(t.Context(), []string{"--go-tests", "HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
 	}
 	for _, s := range []string{"(package)", "crashed while running TestSlow", "panic: boom"} {
@@ -1552,7 +1839,7 @@ func TestRunCrashNamesRunningTest(t *testing.T) {
 		}
 	}
 	app, _ = fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
-	jobs, _ := jsonJobs(t, app, cli.ExitFailed)
+	jobs, _ := jsonJobs(t, app, cli.ExitFailed, "--go-tests")
 	tests := jsonTests(t, jobs[failedJob])
 	if len(tests) != 1 || tests[0].Name != "(package)" || tests[0].RunningTest != "TestSlow" {
 		t.Errorf("tests = %+v, want the (package) crash with running_test TestSlow", tests)
@@ -1562,7 +1849,7 @@ func TestRunCrashNamesRunningTest(t *testing.T) {
 func TestRunTableCapsLinesOfEachTest(t *testing.T) {
 	opts := failingTestsOpts("gotest-long-panic.log")
 	app, _ := fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
-	jobs, _ := jsonJobs(t, app, cli.ExitFailed)
+	jobs, _ := jsonJobs(t, app, cli.ExitFailed, "--go-tests")
 	tests := jsonTests(t, jobs[failedJob])
 	if len(tests) != 1 || len(tests[0].Lines) <= testLines+1 {
 		t.Fatalf("tests = %+v, want one test with more than %d lines, all of them in --json", tests, testLines+1)
@@ -1571,7 +1858,7 @@ func TestRunTableCapsLinesOfEachTest(t *testing.T) {
 
 	app, _ = fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
 	var stdout, stderr bytes.Buffer
-	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+	if code := app.Run(t.Context(), []string{"--go-tests", "HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
 	}
 	out := stdout.String()
@@ -1590,7 +1877,7 @@ func TestRunTableCapsLinesOfEachTest(t *testing.T) {
 func TestRunTableShortTestHasNoMoreLinesNote(t *testing.T) {
 	app, _ := fakeWith(t, "run-list-test-failure.json", nil, nil, failingTestsOpts("gotestsum-failures.log"))
 	var stdout, stderr bytes.Buffer
-	app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr)
+	app.Run(t.Context(), []string{"--go-tests", "HEAD"}, &stdout, &stderr)
 	if !strings.Contains(stdout.String(), "agentimport_test.go:963") || strings.Contains(stdout.String(), "more lines") {
 		t.Errorf("stdout = %q, want both lines and no note", stdout.String())
 	}
@@ -1602,6 +1889,7 @@ func TestNewMaxTestLines(t *testing.T) {
 	}
 }
 
+// TestRunFailedLogErrorKeepsExitCode covers AC-6.
 func TestRunFailedLogErrorKeepsExitCode(t *testing.T) {
 	opts := failingTestsOpts("gotestsum-failures.log")
 	opts.logErr = map[string]error{failedJob: stderrErr(t, "stderr-404.txt")}
@@ -1610,11 +1898,12 @@ func TestRunFailedLogErrorKeepsExitCode(t *testing.T) {
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
 		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "(failing tests unavailable)") {
-		t.Errorf("stdout = %q, want (failing tests unavailable)", stdout.String())
+	if !strings.Contains(stdout.String(), "  (log unavailable)") {
+		t.Errorf("stdout = %q, want (log unavailable)", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "gh run view "+failedRun+" --job "+failedJob+":") {
-		t.Errorf("stderr = %q, want a warning with the error", stderr.String())
+	if !strings.Contains(stderr.String(), "ciwatch: can't fetch the log of job "+failedJob+" ("+failedJobName+") of run "+failedRun) ||
+		!strings.Contains(stderr.String(), "gh run view "+failedRun+" --job "+failedJob+":") {
+		t.Errorf("stderr = %q, want a warning that it can't fetch the log, with the error", stderr.String())
 	}
 	if calls.logs != 1 {
 		t.Errorf("gh run view --log-failed calls = %d, want 1 (a non-network error is not retried)", calls.logs)
@@ -1622,12 +1911,14 @@ func TestRunFailedLogErrorKeepsExitCode(t *testing.T) {
 	app, _ = fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
 	jobs, _ := jsonJobs(t, app, cli.ExitFailed)
 	job := jobs[failedJob]
-	if _, ok := job["tests"]; ok {
-		t.Errorf("job has tests %s, want none when the fetch failed", job["tests"])
+	for _, key := range []string{"tests", "steps", "tests_error"} {
+		if _, ok := job[key]; ok {
+			t.Errorf("job has %s %s, want none when the fetch failed", key, job[key])
+		}
 	}
 	var msg string
-	if err := json.Unmarshal(job["tests_error"], &msg); err != nil || !strings.Contains(msg, "gh run view "+failedRun+" --job "+failedJob) {
-		t.Errorf("tests_error = %s (%v), want the error", job["tests_error"], err)
+	if err := json.Unmarshal(job["log_error"], &msg); err != nil || !strings.Contains(msg, "gh run view "+failedRun+" --job "+failedJob) {
+		t.Errorf("log_error = %s (%v), want the error", job["log_error"], err)
 	}
 }
 
@@ -1636,11 +1927,11 @@ func TestRunFailedLogRetriesNetworkError(t *testing.T) {
 	opts.logErrCalls = map[string]int{failedJob: 1}
 	app, calls := fakeWith(t, "run-list-test-failure.json", nil, nil, opts)
 	var stdout, stderr bytes.Buffer
-	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+	if code := app.Run(t.Context(), []string{"--go-tests", "HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
 	}
 	if strings.Contains(stdout.String(), "unavailable") || !strings.Contains(stdout.String(), "TestAgentImportFailsWhole") {
-		t.Errorf("stdout = %q, want the failing test, not (failing tests unavailable)", stdout.String())
+		t.Errorf("stdout = %q, want the failing test, not (log unavailable)", stdout.String())
 	}
 	n := len(calls.clock.waits)
 	if calls.logs != 2 || n == 0 || calls.clock.waits[n-1] != app.Backoff ||
@@ -1657,8 +1948,8 @@ func TestRunFailedLogRetriesRunOutKeepExitCode(t *testing.T) {
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
 		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "(failing tests unavailable)") || !strings.Contains(stderr.String(), "gave up after 8 retries: gh run view "+failedRun+" --job "+failedJob+": ") {
-		t.Errorf("stdout = %q, stderr = %q, want (failing tests unavailable) and the gave-up warning", stdout.String(), stderr.String())
+	if !strings.Contains(stdout.String(), "(log unavailable)") || !strings.Contains(stderr.String(), "gave up after 8 retries: gh run view "+failedRun+" --job "+failedJob+": ") {
+		t.Errorf("stdout = %q, stderr = %q, want (log unavailable) and the gave-up warning", stdout.String(), stderr.String())
 	}
 	if want := app.Retries + 1; calls.logs != want {
 		t.Errorf("log calls = %d, want %d", calls.logs, want)
@@ -1680,8 +1971,8 @@ func TestRunFailedLogGivesUpOnceForAllJobs(t *testing.T) {
 	if want := app.Retries + 1 + 1; calls.logs != want {
 		t.Errorf("log calls = %d, want %d", calls.logs, want)
 	}
-	if n := strings.Count(stdout.String(), "(failing tests unavailable)"); n != 2 {
-		t.Errorf("stdout = %q, want (failing tests unavailable) twice", stdout.String())
+	if n := strings.Count(stdout.String(), "(log unavailable)"); n != 2 {
+		t.Errorf("stdout = %q, want (log unavailable) twice", stdout.String())
 	}
 }
 
@@ -1711,7 +2002,7 @@ func TestRunTimedOutJobGetsFailingTests(t *testing.T) {
 	}
 	app, calls := fakeWith(t, "", nil, nil, opts)
 	var stdout, stderr bytes.Buffer
-	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+	if code := app.Run(t.Context(), []string{"--go-tests", "HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
 	}
 	// Only the timed-out job's log is fetched, not the skipped job's.

@@ -29,8 +29,12 @@ Schema 1 is not frozen yet: it freezes at ciwatch's first release, and until the
 | `runs[].jobs[].status` | string | always |
 | `runs[].jobs[].conclusion` | string | always, empty while the job is not completed |
 | `runs[].jobs[].url` | string | always |
-| `runs[].jobs[].tests` | array of objects | only for a failed job whose log was read, empty if no failing test was found |
-| `runs[].jobs[].tests_error` | string | only for a failed job whose log could not be read |
+| `runs[].jobs[].steps` | array of objects | only for a failed job whose log was read, empty if no failed step had a line in the log |
+| `runs[].jobs[].steps[].name` | string | always: the failed step's name, or `(job log)` when the job has no failed step |
+| `runs[].jobs[].steps[].lines` | array of strings | always: the last 40 lines of the step's log, without gh's prefix and the timestamp |
+| `runs[].jobs[].steps[].omitted` | integer | always: how many earlier lines were left out, 0 if none |
+| `runs[].jobs[].log_error` | string | only for a failed job whose log could not be read |
+| `runs[].jobs[].tests` | array of objects | only with `--go-tests`, for a failed job whose log was read, empty if no failing test was found |
 | `runs[].jobs[].tests[].package` | string | always, empty if the log names no package |
 | `runs[].jobs[].tests[].name` | string | always |
 | `runs[].jobs[].tests[].lines` | array of strings | always: the log lines around the failure |

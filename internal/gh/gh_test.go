@@ -169,6 +169,35 @@ func TestRunJobsPassesRunIDAndFields(t *testing.T) {
 	}
 }
 
+func TestRunJobsWithStepsDecodesSteps(t *testing.T) {
+	r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
+		return fixture(t, "run-view-44705166834.json"), nil
+	}}
+	got, err := r.RunJobsWithSteps(t.Context(), 44705166834)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 5 {
+		t.Fatalf("got %d jobs, want 5", len(got))
+	}
+	job := got[1]
+	if job.ID != 136182840710 || job.Conclusion != "failure" {
+		t.Errorf("job 1 = %+v, want the failed ubuntu job", job.Job)
+	}
+	if len(job.Steps) != 10 {
+		t.Fatalf("got %d steps, want 10", len(job.Steps))
+	}
+	want := gh.Step{
+		Name:       "Run mise run test",
+		Conclusion: "failure",
+		Started:    time.Date(2026, 11, 20, 8, 47, 47, 0, time.UTC),
+		Completed:  time.Date(2026, 11, 20, 8, 52, 20, 0, time.UTC),
+	}
+	if step := job.Steps[5]; step != want {
+		t.Errorf("step 5 = %+v, want %+v", step, want)
+	}
+}
+
 func TestRunJobsDecodesRecordedOutput(t *testing.T) {
 	view := func(name string) gh.Runner {
 		return gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {

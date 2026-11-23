@@ -10,7 +10,7 @@ It isn't usable yet: the commands are being built one at a time.
 - Report each workflow's and each job's conclusion, as a compact table or as JSON with `--json`.
 - Keep watching through network errors, retrying with backoff.
 - Notice a run that a newer push cancelled, say so and name the newer commit, and with `--follow` watch it instead.
-- For a failed job, show the failing test's name and the lines around it, not the whole log.
+- For a failed job, show the last 40 lines of each failed step, not the whole log, and with `--go-tests` the failing Go tests' names and the lines around them too.
 - For a failed fuzz job, list the failing targets and fetch their crash inputs into `testdata/fuzz/<Target>/` when you ask.
 - Offer to rerun a flaky job's failures.
 - Exit 0 only when every run passed, with a different code for failed, cancelled, and couldn't check.
@@ -18,7 +18,7 @@ It isn't usable yet: the commands are being built one at a time.
 ## Usage
 
 ```sh
-ciwatch [--json] [--once] [--follow] <commit>
+ciwatch [--json] [--once] [--follow] [--go-tests] <commit>
 ```
 
 ciwatch polls until every run for the commit has completed, and keeps looking for new runs for 60 seconds after the push so runs that start late are included. If the commit's runs were created longer ago than that (a commit pushed before, or pushed again), it looks for 60 seconds from when ciwatch started instead, so the new push's runs are caught and an old commit waits that long once. It writes a progress line to stderr whenever a run changes, then prints the final table (or the `--json` document) to stdout. With `--once` it checks a single time instead, and exits 4 if runs are still going. A `gh` call that fails with a network error or a temporary GitHub error (HTTP 502, 503 or 504) is retried up to 8 times, waiting 1s, 2s, 4s and so on up to 30s between tries, and ciwatch says on stderr what it is waiting for; only when the retries run out does it exit 4. The exception is the jobs fetch: if fetching a run's jobs runs out of retries, ciwatch warns on stderr, shows `(jobs unavailable)` for that run, and keeps the exit code the runs' conclusions give rather than exiting 4.

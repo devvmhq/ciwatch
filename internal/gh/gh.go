@@ -172,10 +172,38 @@ func (r Runner) listRuns(ctx context.Context, filter ...string) ([]Run, error) {
 	return runs, nil
 }
 
+// Step is one step of a job. Its times are whole seconds.
+type Step struct {
+	Name       string
+	Conclusion string
+	Started    time.Time
+	Completed  time.Time
+}
+
+// JobSteps is a job and its steps.
+type JobSteps struct {
+	Job
+	Steps []Step
+}
+
 // RunJobs lists the jobs of the latest attempt of the workflow run runID.
-// gh can't narrow the fields inside a job, so the output also has steps and
-// timestamps, which are ignored.
+// Only tests call it; ciwatch itself uses RunJobsWithSteps.
 func (r Runner) RunJobs(ctx context.Context, runID int64) ([]Job, error) {
+	withSteps, err := r.RunJobsWithSteps(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	jobs := make([]Job, len(withSteps))
+	for i, j := range withSteps {
+		jobs[i] = j.Job
+	}
+	return jobs, nil
+}
+
+// RunJobsWithSteps lists the jobs of the latest attempt of the workflow run
+// runID, each with its steps. gh can't narrow the fields inside a job, so the
+// one call gives both.
+func (r Runner) RunJobsWithSteps(ctx context.Context, runID int64) ([]JobSteps, error) {
 	out, err := r.Exec(ctx, "gh", "run", "view", strconv.FormatInt(runID, 10), "--json", "jobs")
 	if err != nil {
 		return nil, fmt.Errorf("gh run view %d: %w", runID, markNetwork(err))
@@ -187,14 +215,23 @@ func (r Runner) RunJobs(ctx context.Context, runID int64) ([]Job, error) {
 			Status     string `json:"status"`
 			Conclusion string `json:"conclusion"`
 			URL        string `json:"url"`
+			Steps      []struct {
+				Name        string    `json:"name"`
+				Conclusion  string    `json:"conclusion"`
+				StartedAt   time.Time `json:"startedAt"`
+				CompletedAt time.Time `json:"completedAt"`
+			} `json:"steps"`
 		} `json:"jobs"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil {
 		return nil, fmt.Errorf("decoding gh run view output: %w", err)
 	}
-	jobs := make([]Job, len(raw.Jobs))
+	jobs := make([]JobSteps, len(raw.Jobs))
 	for i, x := range raw.Jobs {
-		jobs[i] = Job(x)
+		jobs[i].Job = Job{ID: x.ID, Name: x.Name, Status: x.Status, Conclusion: x.Conclusion, URL: x.URL}
+		for _, s := range x.Steps {
+			jobs[i].Steps = append(jobs[i].Steps, Step{Name: s.Name, Conclusion: s.Conclusion, Started: s.StartedAt, Completed: s.CompletedAt})
+		}
 	}
 	return jobs, nil
 }

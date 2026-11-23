@@ -32,8 +32,8 @@ type Run struct {
 	SupersededBy string `json:"superseded_by,omitempty"`
 }
 
-// Job is one job of a run. A job with Tests or TestsError is one whose failing
-// tests were looked for.
+// Job is one job of a run. A job with Steps or LogError is a failed one whose
+// log was fetched.
 type Job struct {
 	ID         int64  `json:"id"`
 	Name       string `json:"name"`
@@ -41,8 +41,16 @@ type Job struct {
 	Conclusion string `json:"conclusion"`
 	URL        string `json:"url"`
 
-	Tests      *[]Test `json:"tests,omitempty"` // only for a failed job whose log was read
-	TestsError string  `json:"tests_error,omitempty"`
+	Steps    *[]Step `json:"steps,omitempty"` // only for a failed job whose log was read
+	LogError string  `json:"log_error,omitempty"`
+	Tests    *[]Test `json:"tests,omitempty"` // only with --go-tests, for a failed job whose log was read
+}
+
+// Step is a failed step and the last lines of its log.
+type Step struct {
+	Name    string   `json:"name"`
+	Lines   []string `json:"lines"`
+	Omitted int      `json:"omitted"`
 }
 
 // Test is one failing test and the log lines around it.
@@ -53,18 +61,27 @@ type Test struct {
 	RunningTest string   `json:"running_test,omitempty"`
 }
 
-func buildReport(sha string, followed []string, runs []runWithJobs) Report {
+// buildReport builds the report; goTests says whether the failing tests were
+// looked for.
+func buildReport(sha string, followed []string, runs []runWithJobs, goTests bool) Report {
 	out := Report{Schema: Schema, SHA: sha, FollowedFrom: followed, Runs: make([]Run, len(runs))}
 	for i, r := range runs {
 		jobs := make([]Job, len(r.Jobs))
 		for k, j := range r.Jobs {
-			jobs[k] = Job{ID: j.ID, Name: j.Name, Status: j.Status, Conclusion: j.Conclusion, URL: j.URL, TestsError: j.TestsErr}
-			if j.Failed && j.TestsErr == "" {
-				tests := make([]Test, len(j.Tests))
-				for n, f := range j.Tests {
-					tests[n] = Test{Package: f.Package, Name: f.Name, Lines: append([]string{}, f.Lines...), RunningTest: f.RunningTest}
+			jobs[k] = Job{ID: j.ID, Name: j.Name, Status: j.Status, Conclusion: j.Conclusion, URL: j.URL, LogError: j.LogErr}
+			if j.Failed && j.LogErr == "" {
+				steps := make([]Step, len(j.Steps))
+				for n, s := range j.Steps {
+					steps[n] = Step{Name: s.Name, Lines: append([]string{}, s.Lines...), Omitted: s.Omitted}
 				}
-				jobs[k].Tests = &tests
+				jobs[k].Steps = &steps
+				if goTests {
+					tests := make([]Test, len(j.Tests))
+					for n, f := range j.Tests {
+						tests[n] = Test{Package: f.Package, Name: f.Name, Lines: append([]string{}, f.Lines...), RunningTest: f.RunningTest}
+					}
+					jobs[k].Tests = &tests
+				}
 			}
 		}
 		out.Runs[i] = Run{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr, SupersededBy: r.SupersededBy}
@@ -102,7 +119,7 @@ func (rep Report) WriteTable(w io.Writer, maxLines int) error {
 	// The blocks are free-form, so they follow the flush, not the columns.
 	for _, r := range rep.Runs {
 		for _, j := range r.Jobs {
-			if j.Tests != nil || j.TestsError != "" {
+			if j.Steps != nil || j.LogError != "" {
 				writeFailureBlock(w, r, j, maxLines)
 			}
 		}
@@ -110,18 +127,32 @@ func (rep Report) WriteTable(w io.Writer, maxLines int) error {
 	return nil
 }
 
-// writeFailureBlock writes the failing tests of the failed job j of r.
+// writeFailureBlock writes the failed steps of the failed job j of r, then its
+// failing tests if they were looked for.
 func writeFailureBlock(w io.Writer, r Run, j Job, maxLines int) {
 	_, _ = fmt.Fprintf(w, "\n%s (%s, run %d):\n", j.Name, r.Workflow, r.ID)
+	var steps []Step
+	if j.Steps != nil {
+		steps = *j.Steps
+	}
 	var tests []Test
 	if j.Tests != nil {
 		tests = *j.Tests
 	}
 	switch {
-	case j.TestsError != "":
-		_, _ = fmt.Fprintln(w, "  (failing tests unavailable)")
-	case len(tests) == 0:
-		_, _ = fmt.Fprintln(w, "  (no failing tests found in the log)")
+	case j.LogError != "":
+		_, _ = fmt.Fprintln(w, "  (log unavailable)")
+	case len(steps) == 0:
+		_, _ = fmt.Fprintln(w, "  (no failed step in the log)")
+	}
+	for _, s := range steps {
+		_, _ = fmt.Fprintf(w, "  %s:\n", s.Name)
+		if s.Omitted > 0 {
+			_, _ = fmt.Fprintf(w, "    … %d earlier lines\n", s.Omitted)
+		}
+		for _, l := range s.Lines {
+			_, _ = fmt.Fprintln(w, "    "+l)
+		}
 	}
 	for _, f := range tests {
 		head := "  FAIL"
