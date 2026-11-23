@@ -22,6 +22,7 @@ ciwatch watches every GitHub Actions run for a commit until it finishes, and sho
 
 - **The gate:** `mise run fmt && mise run lint && mise run test`, all passing, before starting a task and before marking it done; a gate failing at the start gets fixed first.
 - **Fail-first tests:** write the test for a change first and see it fail for the right reason, then make it pass.
+- **Edit files with the editor tools,** not `sed`, `perl`, `python` or heredocs.
 - **Ask first** before anything outward-facing (pushing, publishing, posting) and before deleting anything you didn't create.
 - **A task that turns out wrong or incomplete:** say so and propose the change; don't quietly do something else.
 
