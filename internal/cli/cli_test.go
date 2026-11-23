@@ -1704,14 +1704,21 @@ func TestRunCancelledWhileFetchingLogs(t *testing.T) {
 }
 
 func TestRunTimedOutJobGetsFailingTests(t *testing.T) {
-	list := `[{"conclusion":"timed_out","databaseId":7,"status":"completed","workflowName":"CI","url":"u"}]`
-	jobs := `{"jobs":[{"databaseId":8,"name":"slow","status":"completed","conclusion":"timed_out","url":"j"},{"databaseId":9,"name":"skipped","status":"completed","conclusion":"skipped","url":"j"}]}`
-	app := inline(list, jobs)
-	got, _ := jsonJobs(t, app, cli.ExitFailed)
-	if _, ok := got["8"]["tests"]; !ok {
-		t.Errorf("timed out job = %v, want a tests key", got["8"])
+	opts := fakeOpts{
+		listFixtures: []string{"run-list-timed-out.json"},
+		viewFixture:  map[string]string{failedRun: "run-view-44707997310-timed-out.json"},
+		logFixture:   map[string]string{failedJob: "gotestsum-failures.log"},
 	}
-	if _, ok := got["9"]["tests"]; ok {
-		t.Errorf("skipped job = %v, want no tests key", got["9"])
+	app, calls := fakeWith(t, "", nil, nil, opts)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	// Only the timed-out job's log is fetched, not the skipped job's.
+	if want := []string{failedJob}; !reflect.DeepEqual(calls.logIDs, want) {
+		t.Errorf("logs fetched for jobs %v, want exactly %v", calls.logIDs, want)
+	}
+	if !strings.Contains(stdout.String(), "FAIL internal/vm TestAgentImportFailsWhole") {
+		t.Errorf("stdout = %q, want the timed-out job's failing test", stdout.String())
 	}
 }
