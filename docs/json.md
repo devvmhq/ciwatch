@@ -30,7 +30,7 @@ Schema 1 is not frozen yet: it freezes at ciwatch's first release, and until the
 | `runs[].fuzz_crashes[].fetched_to` | string | only with `--fetch-crashes`, once downloaded: the directory, relative to the checkout |
 | `runs[].fuzz_crashes[].fetch_error` | string | only with `--fetch-crashes`, when the download was skipped or failed |
 | `runs[].artifacts_error` | string | only when the run's artifacts could not be listed |
-| `runs[].newer_run` | object | only for a cancelled run whose workflow has a newer run on the branch, for another commit |
+| `runs[].newer_run` | object | only for a cancelled run whose workflow has a first run after it on the branch, for another commit |
 | `runs[].newer_run.id` | integer | always, with `newer_run`: the newer run's ID |
 | `runs[].newer_run.sha` | string | always, with `newer_run`: the newer run's commit |
 | `runs[].jobs[].id` | integer | always |

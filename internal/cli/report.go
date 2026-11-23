@@ -46,8 +46,8 @@ type FuzzCrash struct {
 	FetchError string `json:"fetch_error,omitempty"`
 }
 
-// NewerRun is the newest run of a cancelled run's workflow on its branch, when
-// it is for another commit and was created after the cancelled run.
+// NewerRun is the first run of a cancelled run's workflow on its branch created
+// after the cancelled run, for another commit.
 type NewerRun struct {
 	ID  int64  `json:"id"`
 	SHA string `json:"sha"`

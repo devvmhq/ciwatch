@@ -129,15 +129,13 @@ func (r Runner) RunList(ctx context.Context, sha string) ([]Run, error) {
 	return r.listRuns(ctx, "--commit", sha, "--limit", strconv.Itoa(RunListLimit))
 }
 
-// LatestRun finds the newest run of the workflow workflowID on branch, once. ok
-// is false if there is none. The workflow is named by ID because its name can
-// be a file path, or shared by two workflows, which gh can't select by.
-func (r Runner) LatestRun(ctx context.Context, branch string, workflowID int64) (run Run, ok bool, err error) {
-	runs, err := r.listRuns(ctx, "--branch", branch, "--workflow", strconv.FormatInt(workflowID, 10), "--limit", "1")
-	if err != nil || len(runs) == 0 {
-		return Run{}, false, err
-	}
-	return runs[0], true, nil
+// RunsSince lists, once, the runs of the workflow workflowID on branch created
+// at or after since, at most RunListLimit of them. The workflow is named by ID
+// because its name can be a file path, or shared by two workflows, which gh
+// can't select by.
+func (r Runner) RunsSince(ctx context.Context, branch string, workflowID int64, since time.Time) ([]Run, error) {
+	return r.listRuns(ctx, "--branch", branch, "--workflow", strconv.FormatInt(workflowID, 10),
+		"--created", ">="+since.UTC().Format(time.RFC3339), "--limit", strconv.Itoa(RunListLimit))
 }
 
 // listRuns runs gh run list with the filter flags and decodes the runs.

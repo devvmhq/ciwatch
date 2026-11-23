@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -31,12 +32,13 @@ const branchFields = "databaseId,workflowDatabaseId,workflowName,status,conclusi
 type site struct {
 	head    string            // what git rev-parse prints
 	commit  string            // the runs of head: a fixture, or raw output if it starts with "["
-	latest  map[string]string // workflow ID to a fixture, or raw output if it starts with "["
-	latestE error             // if set, gh run list --branch fails with it
+	created string            // the cancelled run's createdAt, which --created must carry; shaCancelled's run's if empty
+	since   map[string]string // workflow ID to a fixture, or raw output if it starts with "["
+	sinceE  error             // if set, gh run list --branch fails with it
 }
 
 type siteCalls struct {
-	latest []string // the --workflow of each gh run list --branch
+	since []string // the --workflow of each gh run list --branch
 }
 
 func (s site) app(t *testing.T) (cli.App, *siteCalls) {
@@ -59,15 +61,19 @@ func (s site) app(t *testing.T) (cli.App, *siteCalls) {
 				t.Errorf("gh args = %q, want --workflow and an ID after the branch", args)
 				return nil, errors.New("bad args")
 			}
-			c.latest = append(c.latest, args[5])
-			want := []string{"run", "list", "--branch", "main", "--workflow", args[5], "--limit", "1", "--json", branchFields}
+			c.since = append(c.since, args[5])
+			created := s.created
+			if created == "" {
+				created = "2026-11-13T03:47:33Z"
+			}
+			want := []string{"run", "list", "--branch", "main", "--workflow", args[5], "--created", ">=" + created, "--limit", "100", "--json", branchFields}
 			if !reflect.DeepEqual(args, want) {
 				t.Errorf("gh args = %q, want %q", args, want)
 			}
-			if s.latestE != nil {
-				return nil, s.latestE
+			if s.sinceE != nil {
+				return nil, s.sinceE
 			}
-			f, ok := s.latest[args[5]]
+			f, ok := s.since[args[5]]
 			if !ok {
 				t.Errorf("gh run list --branch for unexpected workflow %s", args[5])
 				return nil, errors.New("unexpected workflow")
@@ -101,31 +107,107 @@ func supersededSite() site {
 	return site{
 		head:   shaCancelled,
 		commit: supersedCI,
-		latest: map[string]string{ciID: "run-list-latest-newer.json"},
+		since:  map[string]string{ciID: sinceFixture},
 	}
 }
 
-func TestCancelledLooksUpLatestRunOnce(t *testing.T) { // AC-1
+const sinceFixture = "run-list-since-43361281082.json"
+
+func TestCancelledLooksUpRunsSinceOnce(t *testing.T) { // AC-1
 	app, calls := supersededSite().app(t) // the fake checks the exact arguments
 	var stdout, stderr bytes.Buffer
 	app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr)
-	if want := []string{ciID}; !reflect.DeepEqual(calls.latest, want) {
-		t.Errorf("gh run list --branch --workflow = %q, want %q: one lookup, for the cancelled CI run only", calls.latest, want)
+	if want := []string{ciID}; !reflect.DeepEqual(calls.since, want) {
+		t.Errorf("gh run list --branch --workflow = %q, want %q: one lookup, for the cancelled CI run only", calls.since, want)
 	}
 }
 
-func TestCancelledNamesNewerRun(t *testing.T) { // AC-2, AC-4
-	app, _ := supersededSite().app(t)
+func TestCancelledNamesFirstRunAfter(t *testing.T) { // AC-1, AC-2
+	// The recorded lookup, then the same runs oldest first: gh's order
+	// doesn't matter.
+	var runs []map[string]any
+	if err := json.Unmarshal(readFixture(t, sinceFixture), &runs); err != nil {
+		t.Fatal(err)
+	}
+	for i, j := 0, len(runs)-1; i < j; i, j = i+1, j-1 {
+		runs[i], runs[j] = runs[j], runs[i]
+	}
+	oldestFirst, err := json.Marshal(runs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, since := range map[string]string{"as recorded": sinceFixture, "oldest first": string(oldestFirst)} {
+		t.Run(name, func(t *testing.T) {
+			s := supersededSite()
+			s.since = map[string]string{ciID: since}
+			app, _ := s.app(t)
+			var stdout, stderr bytes.Buffer
+			if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitCancelled {
+				t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitCancelled, stderr.String())
+			}
+			checkTable(t, stdout.String(), []row{
+				runRow("Docs", "completed", "success"),
+				{fields: append([]string{"CI", "completed", "cancelled"}, strings.Fields(newerNote)...)},
+			})
+			if got := lastLine(stderr.String()); got != newerHint {
+				t.Errorf("last stderr line = %q, want %q", got, newerHint)
+			}
+		})
+	}
+}
+
+func TestCancelledNamesLowestIDOnATie(t *testing.T) { // AC-1
+	const (
+		shaLow  = "1111111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		shaHigh = "2222222bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	)
+	run := func(id int, sha string) string {
+		return fmt.Sprintf(`{"conclusion":"success","createdAt":"2026-11-13T03:50:00Z","updatedAt":"2026-11-13T04:06:05Z","databaseId":%d,"event":"push","headBranch":"main","headSha":"%s","status":"completed","url":"u","workflowDatabaseId":409041453,"workflowName":"CI"}`, id, sha)
+	}
+	low, high := run(100, shaLow), run(200, shaHigh)
+	for name, since := range map[string]string{
+		"lowest ID first":  "[" + low + "," + high + "]",
+		"highest ID first": "[" + high + "," + low + "]",
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := supersededSite()
+			s.since = map[string]string{ciID: since}
+			app, _ := s.app(t)
+			var stdout, stderr bytes.Buffer
+			if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitCancelled {
+				t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitCancelled, stderr.String())
+			}
+			checkTable(t, stdout.String(), []row{
+				runRow("Docs", "completed", "success"),
+				{fields: []string{"CI", "completed", "cancelled", "(newer", "run", "100", "for", "1111111)"}},
+			})
+			const hint = "ciwatch: run 43361281082 (CI) was cancelled; to watch the newer run: ciwatch " + shaLow
+			if got := lastLine(stderr.String()); got != hint {
+				t.Errorf("last stderr line = %q, want %q", got, hint)
+			}
+		})
+	}
+}
+
+func TestRunsSinceFullPage(t *testing.T) { // AC-4
+	// 100 runs of another commit, newest first, as gh would cut the list off.
+	var runs []string
+	for i := range 100 {
+		runs = append(runs, fmt.Sprintf(`{"conclusion":"success","createdAt":"2026-11-14T%02d:%02d:00Z","updatedAt":"2026-11-14T23:59:00Z","databaseId":%d,"event":"push","headBranch":"main","headSha":"%s","status":"completed","url":"u","workflowDatabaseId":409041453,"workflowName":"CI"}`, 23-i/60, 59-i%60, 50000000000+int64(100-i), shaNewer))
+	}
+	s := supersededSite()
+	s.since = map[string]string{ciID: "[" + strings.Join(runs, ",") + "]"}
+	app, _ := s.app(t)
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitCancelled {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitCancelled, stderr.String())
 	}
-	checkTable(t, stdout.String(), []row{
-		runRow("Docs", "completed", "success"),
-		{fields: append([]string{"CI", "completed", "cancelled"}, strings.Fields(newerNote)...)},
-	})
-	if got := lastLine(stderr.String()); got != newerHint {
-		t.Errorf("last stderr line = %q, want %q", got, newerHint)
+	const warning = "ciwatch: can't name the run after run 43361281082 (CI): 100 or more runs since it"
+	if !strings.Contains(stderr.String(), warning+"\n") {
+		t.Errorf("stderr = %q, want the line %q", stderr.String(), warning)
+	}
+	if strings.Contains(stdout.String(), "newer run") || strings.Contains(stderr.String(), "to watch the newer run") {
+		t.Errorf("stdout = %q, stderr = %q, want the run plainly cancelled", stdout.String(), stderr.String())
 	}
 }
 
@@ -168,26 +250,30 @@ func TestCancelledNewerRunJSON(t *testing.T) { // AC-2
 func TestCancelledWithoutNewerRun(t *testing.T) { // AC-3, AC-4
 	const olderRun = `[{"conclusion":"success","createdAt":"2026-11-13T00:53:46Z","updatedAt":"2026-11-13T01:06:05Z","databaseId":43340691235,"event":"push","headBranch":"main","headSha":"` + shaOlder + `","status":"completed","url":"u","workflowDatabaseId":409041453,"workflowName":"CI"}]`
 	const sameSecondRun = `[{"conclusion":"success","createdAt":"2026-11-13T03:47:33Z","updatedAt":"2026-11-13T04:06:05Z","databaseId":43361860563,"event":"push","headBranch":"main","headSha":"` + shaNewer + `","status":"completed","url":"u","workflowDatabaseId":409041453,"workflowName":"CI"}]`
+	const rerunRuns = `[{"conclusion":"success","createdAt":"2026-11-13T03:55:00Z","updatedAt":"2026-11-13T04:06:05Z","databaseId":43361281082,"event":"push","headBranch":"main","headSha":"` + shaCancelled + `","status":"completed","url":"u","workflowDatabaseId":409041453,"workflowName":"CI","attempt":2},
+{"conclusion":"cancelled","createdAt":"2026-11-13T03:47:33Z","updatedAt":"2026-11-13T03:53:18Z","databaseId":43361281082,"event":"push","headBranch":"main","headSha":"` + shaCancelled + `","status":"completed","url":"u","workflowDatabaseId":409041453,"workflowName":"CI"}]`
 	tests := []struct {
-		name   string
-		commit string
-		head   string
-		latest string
+		name    string
+		commit  string
+		head    string
+		created string
+		since   string
 	}{
-		{"no run", supersedCI, shaCancelled, "[]"},
-		{"a run of another commit created in the same second", supersedCI, shaCancelled, sameSecondRun},
-		{"the cancelled run itself", "run-list-cancelled.json", shaByHand, "run-list-latest-self.json"},
-		{"an older run of another commit", supersedCI, shaCancelled, olderRun},
+		{"no run", supersedCI, shaCancelled, "", "[]"},
+		{"a run of another commit created in the same second", supersedCI, shaCancelled, "", sameSecondRun},
+		{"the cancelled run itself", "run-list-cancelled.json", shaByHand, "2026-11-20T09:07:13Z", "run-list-latest-self.json"},
+		{"an older run of another commit", supersedCI, shaCancelled, "", olderRun},
+		{"only a rerun of the same commit", supersedCI, shaCancelled, "", rerunRuns},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app, calls := site{head: tt.head, commit: tt.commit, latest: map[string]string{ciID: tt.latest}}.app(t)
+			app, calls := site{head: tt.head, commit: tt.commit, created: tt.created, since: map[string]string{ciID: tt.since}}.app(t)
 			var stdout, stderr bytes.Buffer
 			if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitCancelled {
 				t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitCancelled, stderr.String())
 			}
-			if len(calls.latest) != 1 {
-				t.Errorf("lookups = %d, want 1", len(calls.latest))
+			if len(calls.since) != 1 {
+				t.Errorf("lookups = %d, want 1", len(calls.since))
 			}
 			if strings.Contains(stdout.String(), "newer run") || strings.Contains(stderr.String(), "newer run") {
 				t.Errorf("stdout = %q, stderr = %q, want no mention of a newer run", stdout.String(), stderr.String())
@@ -196,7 +282,7 @@ func TestCancelledWithoutNewerRun(t *testing.T) { // AC-3, AC-4
 				t.Errorf("stdout = %q, want the run reported as cancelled", stdout.String())
 			}
 
-			app, _ = site{head: tt.head, commit: tt.commit, latest: map[string]string{ciID: tt.latest}}.app(t)
+			app, _ = site{head: tt.head, commit: tt.commit, created: tt.created, since: map[string]string{ciID: tt.since}}.app(t)
 			stdout.Reset()
 			stderr.Reset()
 			app.Run(t.Context(), []string{"--json", "HEAD"}, &stdout, &stderr)
@@ -212,7 +298,7 @@ func TestNewerRunHintWithFailure(t *testing.T) { // AC-4
 {"conclusion":"failure","createdAt":"2026-11-13T03:47:33Z","updatedAt":"2026-11-13T03:49:18Z","databaseId":43361281019,"event":"push","headBranch":"main","headSha":"` + shaCancelled + `","status":"completed","url":"u","workflowDatabaseId":409041454,"workflowName":"Docs"},
 {"conclusion":"cancelled","createdAt":"2026-11-13T03:47:33Z","updatedAt":"2026-11-13T03:53:18Z","databaseId":43361281082,"event":"push","headBranch":"main","headSha":"` + shaCancelled + `","status":"completed","url":"u","workflowDatabaseId":409041453,"workflowName":"CI"}
 ]`
-	app, _ := site{head: shaCancelled, commit: runs, latest: map[string]string{ciID: "run-list-latest-newer.json"}}.app(t)
+	app, _ := site{head: shaCancelled, commit: runs, since: map[string]string{ciID: sinceFixture}}.app(t)
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
 		t.Fatalf("exit code = %d, want %d: a failure beats a cancellation (stderr %q)", code, cli.ExitFailed, stderr.String())
@@ -280,14 +366,14 @@ func TestDocsDescribeNewerRun(t *testing.T) { // AC-5
 
 func TestNewerRunLookupFailureKeepsCancelled(t *testing.T) { // AC-6
 	s := supersededSite()
-	s.latestE = networkErr(t)
+	s.sinceE = networkErr(t)
 	app, calls := s.app(t)
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitCancelled {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitCancelled, stderr.String())
 	}
-	if want := 1 + app.Retries; len(calls.latest) != want {
-		t.Errorf("gh run list --branch calls = %d, want %d: the retries run out", len(calls.latest), want)
+	if want := 1 + app.Retries; len(calls.since) != want {
+		t.Errorf("gh run list --branch calls = %d, want %d: the retries run out", len(calls.since), want)
 	}
 	if !strings.Contains(stderr.String(), "ciwatch: can't look for a newer run after run 43361281082 (CI): ") {
 		t.Errorf("stderr = %q, want a warning that the lookup failed", stderr.String())
@@ -304,7 +390,7 @@ func TestInterruptDuringLookupWarnsOnce(t *testing.T) { // AC-6
 ]`
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	app, calls := site{head: shaCancelled, commit: cancelled, latestE: context.Canceled}.app(t)
+	app, calls := site{head: shaCancelled, commit: cancelled, sinceE: context.Canceled}.app(t)
 	inner := app.GH.Exec
 	app.GH.Exec = func(c context.Context, name string, args ...string) ([]byte, error) {
 		if len(args) > 2 && args[2] == "--branch" {
@@ -316,8 +402,8 @@ func TestInterruptDuringLookupWarnsOnce(t *testing.T) { // AC-6
 	if code := app.Run(ctx, []string{"HEAD"}, &stdout, &stderr); code != cli.ExitUnchecked {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, stderr.String())
 	}
-	if len(calls.latest) != 1 {
-		t.Errorf("gh run list --branch calls = %d, want 1: no lookups after Ctrl-C", len(calls.latest))
+	if len(calls.since) != 1 {
+		t.Errorf("gh run list --branch calls = %d, want 1: no lookups after Ctrl-C", len(calls.since))
 	}
 	if got := stderr.String(); strings.Contains(got, "can't look") || strings.Count(got, "context canceled") != 1 {
 		t.Errorf("stderr = %q, want the interrupt reported once and no lookup warnings", got)
@@ -337,14 +423,14 @@ func TestTwoCancelledRunsTwoHints(t *testing.T) { // AC-7
 	app, calls := site{
 		head:   shaCancelled,
 		commit: runs,
-		latest: map[string]string{ciID: "run-list-latest-newer.json", "500": lintNewer},
+		since:  map[string]string{ciID: sinceFixture, "500": lintNewer},
 	}.app(t)
 	var stdout, stderr bytes.Buffer
 	if code := app.Run(t.Context(), []string{"--once", "HEAD"}, &stdout, &stderr); code != cli.ExitCancelled {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitCancelled, stderr.String())
 	}
-	if len(calls.latest) != 2 {
-		t.Errorf("lookups = %q, want one for each cancelled run", calls.latest)
+	if len(calls.since) != 2 {
+		t.Errorf("lookups = %q, want one for each cancelled run", calls.since)
 	}
 	hints := map[string]string{
 		"CI":   newerHint,

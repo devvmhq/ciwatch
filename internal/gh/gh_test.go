@@ -56,6 +56,25 @@ func TestRunListPassesCommitAndFields(t *testing.T) {
 	}
 }
 
+func TestRunsSinceArgs(t *testing.T) { // AC-1
+	want := []string{"run", "list", "--branch", "main", "--workflow", "409041453", "--created", ">=2026-11-13T03:47:33Z", "--limit", "100", "--json", headFields}
+	r := gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name != "gh" || !reflect.DeepEqual(args, want) {
+			t.Errorf("exec %s %q, want gh %q", name, args, want)
+		}
+		return fixture(t, "run-list-since-43361281082.json"), nil
+	}}
+	// The time is given in another zone; the flag carries it in UTC.
+	since := time.Date(2026, 11, 13, 5, 47, 33, 0, time.FixedZone("CEST", 2*60*60))
+	got, err := r.RunsSince(t.Context(), "main", 409041453, since)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 25 || got[len(got)-1].ID != 43361281082 || got[len(got)-2].ID != 43361860563 {
+		t.Errorf("runs = %+v, want the 25 recorded runs", got)
+	}
+}
+
 func TestRunListDecodesCreatedAt(t *testing.T) {
 	var args []string
 	r := gh.Runner{Exec: func(_ context.Context, _ string, a ...string) ([]byte, error) {
@@ -388,38 +407,21 @@ func TestRunListDecodesHeadBranchAndSHA(t *testing.T) {
 	}
 }
 
-func TestLatestRunArgs(t *testing.T) { // AC-1
-	want := []string{"run", "list", "--branch", "main", "--workflow", "409041453", "--limit", "1", "--json", headFields}
-	r := gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
-		if name != "gh" || !reflect.DeepEqual(args, want) {
-			t.Errorf("exec %s %q, want gh %q", name, args, want)
-		}
-		return fixture(t, "run-list-latest-newer.json"), nil
-	}}
-	got, ok, err := r.LatestRun(t.Context(), "main", 409041453)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok || got.ID != 43361860563 || got.HeadSHA != "90694a414f84ff5d765cdb6c8741e8d3888a2cbb" || got.HeadBranch != "main" {
-		t.Errorf("run = %+v, ok = %v, want run 43361860563 for 90694a4 on main", got, ok)
-	}
-}
-
-func TestLatestRunEmpty(t *testing.T) {
+func TestRunsSinceEmpty(t *testing.T) {
 	r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
 		return []byte("[]"), nil
 	}}
-	got, ok, err := r.LatestRun(t.Context(), "main", 409041453)
-	if err != nil || ok {
-		t.Errorf("run = %+v, ok = %v, err = %v, want no run and no error", got, ok, err)
+	got, err := r.RunsSince(t.Context(), "main", 409041453, time.Now())
+	if err != nil || len(got) != 0 {
+		t.Errorf("runs = %+v, err = %v, want no runs and no error", got, err)
 	}
 }
 
-func TestLatestRunMarksNetworkErrors(t *testing.T) {
+func TestRunsSinceMarksNetworkErrors(t *testing.T) {
 	r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
 		return nil, ghFailure(t, "stderr-network-dial.txt")
 	}}
-	_, _, err := r.LatestRun(t.Context(), "main", 409041453)
+	_, err := r.RunsSince(t.Context(), "main", 409041453, time.Now())
 	if !errors.Is(err, gh.ErrNetwork) {
 		t.Errorf("err = %v, want one that is ErrNetwork", err)
 	}

@@ -219,8 +219,8 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 			return nil, opts.downloadErr[args[4]]
 		case name == "gh" && len(args) >= 4 && args[0] == "run" && args[1] == "list" && args[2] == "--branch":
 			c.branch++
-			if len(args) != 10 || args[6] != "--limit" || args[7] != "1" {
-				t.Errorf("gh args = %q, want the newest-run lookup: --branch, --workflow and --limit 1", args)
+			if len(args) != 12 || args[6] != "--created" || args[8] != "--limit" || args[9] != "100" {
+				t.Errorf("gh args = %q, want the lookup since the cancelled run: --branch, --workflow, --created and --limit 100", args)
 			}
 			return []byte("[]"), nil // these tests have no newer run; newer_test.go covers one
 		case name == "gh" && len(args) >= 2 && args[0] == "run" && args[1] == "list":

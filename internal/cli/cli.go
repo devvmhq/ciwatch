@@ -216,7 +216,7 @@ type runWithJobs struct {
 	gh.Run
 	Jobs    []jobResult
 	JobsErr string
-	Newer   *gh.Run // the newest run of the workflow on the branch, if it is for a newer commit
+	Newer   *gh.Run // the first run of the workflow on the branch after this one, for another commit, if any
 
 	Crashes      []crash // the fuzz crash inputs among the run's artifacts
 	ArtifactsErr string  // why the artifacts couldn't be listed
@@ -592,10 +592,11 @@ func short(sha string) string {
 	return sha
 }
 
-// newerRuns looks up, for each completed cancelled run on a branch, the newest
-// run of its workflow on that branch, and returns by run ID those that are for
-// another commit and were created after the cancelled run. A lookup that fails
-// is a warning, and the run stays plainly cancelled.
+// newerRuns looks up, for each completed cancelled run on a branch, the runs of
+// its workflow on that branch since it, and returns by run ID the first one
+// after it that is for another commit. A lookup that fails is a warning, and so
+// is a full page of 100 runs, which may have lost the oldest; either way the run
+// stays plainly cancelled.
 func (a App) newerRuns(ctx context.Context, runs []gh.Run, w io.Writer) map[int64]gh.Run {
 	newer := map[int64]gh.Run{}
 	lookupApp := a
@@ -603,13 +604,8 @@ func (a App) newerRuns(ctx context.Context, runs []gh.Run, w io.Writer) map[int6
 		if r.Status != "completed" || r.Conclusion != "cancelled" || r.HeadBranch == "" {
 			continue
 		}
-		type latest struct {
-			run gh.Run
-			ok  bool
-		}
-		got, err := retry(ctx, lookupApp, w, "gh run list", func() (latest, error) {
-			run, ok, err := a.GH.LatestRun(ctx, r.HeadBranch, r.WorkflowID)
-			return latest{run, ok}, err
+		got, err := retry(ctx, lookupApp, w, "gh run list", func() ([]gh.Run, error) {
+			return a.GH.RunsSince(ctx, r.HeadBranch, r.WorkflowID, r.Created)
 		})
 		if err != nil {
 			if ctx.Err() != nil { // Ctrl-C: no warning per remaining run
@@ -622,11 +618,32 @@ func (a App) newerRuns(ctx context.Context, runs []gh.Run, w io.Writer) map[int6
 			continue
 		}
 		lookupApp.Retries = a.Retries
-		if got.ok && got.run.HeadSHA != r.HeadSHA && got.run.HeadSHA != "" && got.run.Created.After(r.Created) {
-			newer[r.ID] = got.run
+		if len(got) >= gh.RunListLimit { // the oldest runs may have been cut off
+			_, _ = fmt.Fprintf(w, "ciwatch: can't name the run after run %d (%s): %d or more runs since it\n", r.ID, r.Workflow, gh.RunListLimit)
+			continue
+		}
+		if next, ok := firstAfter(r, got); ok {
+			newer[r.ID] = next
 		}
 	}
 	return newer
+}
+
+// firstAfter picks, from runs, the one for another commit than cancelled that
+// was created strictly after it, the earliest, the lowest ID on a tie. The order
+// of runs doesn't matter.
+func firstAfter(cancelled gh.Run, runs []gh.Run) (gh.Run, bool) {
+	var best gh.Run
+	found := false
+	for _, r := range runs {
+		if r.HeadSHA == "" || r.HeadSHA == cancelled.HeadSHA || !r.Created.After(cancelled.Created) {
+			continue
+		}
+		if !found || r.Created.Before(best.Created) || r.Created.Equal(best.Created) && r.ID < best.ID {
+			best, found = r, true
+		}
+	}
+	return best, found
 }
 
 // retry calls call, and calls it again after a backoff wait while it fails
