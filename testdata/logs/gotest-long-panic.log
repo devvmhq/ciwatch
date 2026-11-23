@@ -1,0 +1,36 @@
+--- FAIL: TestDeep (0.00s)
+panic: deep recursion [recovered, repanicked]
+
+goroutine 7 [running]:
+example.com/p.level0(0x1)
+	/tmp/build/p/p_test.go:10 +0x14
+example.com/p.level1(0x2)
+	/tmp/build/p/p_test.go:11 +0x15
+example.com/p.level2(0x3)
+	/tmp/build/p/p_test.go:12 +0x16
+example.com/p.level3(0x4)
+	/tmp/build/p/p_test.go:13 +0x17
+example.com/p.level4(0x5)
+	/tmp/build/p/p_test.go:14 +0x18
+example.com/p.level5(0x6)
+	/tmp/build/p/p_test.go:15 +0x19
+example.com/p.level6(0x7)
+	/tmp/build/p/p_test.go:16 +0x1a
+example.com/p.level7(0x8)
+	/tmp/build/p/p_test.go:17 +0x1b
+example.com/p.level8(0x9)
+	/tmp/build/p/p_test.go:18 +0x1c
+example.com/p.level9(0xa)
+	/tmp/build/p/p_test.go:19 +0x1d
+example.com/p.level10(0xb)
+	/tmp/build/p/p_test.go:20 +0x1e
+example.com/p.level11(0xc)
+	/tmp/build/p/p_test.go:21 +0x1f
+example.com/p.level12(0xd)
+	/tmp/build/p/p_test.go:22 +0x20
+example.com/p.level13(0xe)
+	/tmp/build/p/p_test.go:23 +0x21
+example.com/p.level14(0xf)
+	/tmp/build/p/p_test.go:24 +0x22
+FAIL	example.com/p	0.122s
+FAIL

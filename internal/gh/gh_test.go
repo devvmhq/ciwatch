@@ -389,3 +389,57 @@ func TestBranchRunsMarksNetworkErrors(t *testing.T) {
 		t.Errorf("err = %v, want one that is ErrNetwork", err)
 	}
 }
+
+func TestFailedLogArgs(t *testing.T) {
+	log, err := os.ReadFile(filepath.Join("..", "..", "testdata", "logs", "gotestsum-failures.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"run", "view", "44707997310", "--log-failed", "--job", "136192285080"}
+	r := gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name != "gh" || !reflect.DeepEqual(args, want) {
+			t.Errorf("exec %s %q, want gh %q", name, args, want)
+		}
+		return log, nil
+	}}
+	got, err := r.FailedLog(t.Context(), 44707997310, 136192285080)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(log) {
+		t.Errorf("log = %d bytes, want the %d bytes gh printed, unchanged", len(got), len(log))
+	}
+}
+
+func TestFailedLogMarksErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		file          string
+		wantNetwork   bool
+		wantTemporary bool
+	}{
+		{"HTTP 502", "stderr-502.txt", false, true},
+		{"dial", "stderr-network-dial.txt", true, false},
+		{"HTTP 404", "stderr-404.txt", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
+				return nil, ghFailure(t, tt.file)
+			}}
+			_, err := r.FailedLog(t.Context(), 44707997310, 136192285080)
+			if err == nil {
+				t.Fatal("err = nil, want the gh error")
+			}
+			if !strings.Contains(err.Error(), "gh run view 44707997310 --job 136192285080: ") {
+				t.Errorf("err = %q, want it to name the call", err)
+			}
+			if got := errors.Is(err, gh.ErrNetwork); got != tt.wantNetwork {
+				t.Errorf("errors.Is(err, ErrNetwork) = %v, want %v (err %v)", got, tt.wantNetwork, err)
+			}
+			if got := errors.Is(err, gh.ErrTemporary); got != tt.wantTemporary {
+				t.Errorf("errors.Is(err, ErrTemporary) = %v, want %v (err %v)", got, tt.wantTemporary, err)
+			}
+		})
+	}
+}

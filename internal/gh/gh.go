@@ -199,6 +199,19 @@ func (r Runner) RunJobs(ctx context.Context, runID int64) ([]Job, error) {
 	return jobs, nil
 }
 
+// FailedLog returns the log of the failed steps of the job jobID in the run
+// runID, as gh prints it. This is the one gh call without --json: gh run view
+// --log-failed prints text and has no JSON form. gh serves it only once the run
+// has completed.
+func (r Runner) FailedLog(ctx context.Context, runID, jobID int64) ([]byte, error) {
+	run, job := strconv.FormatInt(runID, 10), strconv.FormatInt(jobID, 10)
+	out, err := r.Exec(ctx, "gh", "run", "view", run, "--log-failed", "--job", job)
+	if err != nil {
+		return nil, fmt.Errorf("gh run view %s --job %s: %w", run, job, markNetwork(err))
+	}
+	return out, nil
+}
+
 // ResolveCommit turns ref into a full commit SHA.
 func (r Runner) ResolveCommit(ctx context.Context, ref string) (string, error) {
 	out, err := r.Exec(ctx, "git", "rev-parse", "--verify", "--end-of-options", ref+"^{commit}")

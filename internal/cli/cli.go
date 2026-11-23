@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/devvmhq/ciwatch/internal/gh"
+	"github.com/devvmhq/ciwatch/internal/testlog"
 )
 
 // Exit codes.
@@ -55,13 +57,15 @@ type App struct {
 	Backoff    time.Duration // the first wait before retrying a gh call that failed with a network error
 	MaxBackoff time.Duration // the longest wait; each wait doubles until it reaches this
 	Retries    int           // how many times to retry one gh call
+
+	MaxTestLines int // the most lines of one failing test the table shows; 0 shows them all
 }
 
 // New returns an App that runs the real gh and git.
 func New() App {
 	return App{
 		GH: gh.Runner{Exec: gh.Exec}, Clock: realClock{}, Interval: 10 * time.Second, Grace: 60 * time.Second,
-		Backoff: time.Second, MaxBackoff: 30 * time.Second, Retries: 8,
+		Backoff: time.Second, MaxBackoff: 30 * time.Second, Retries: 8, MaxTestLines: 20,
 	}
 }
 
@@ -142,14 +146,22 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			}
 			continue
 		}
-		withJobs[i].Jobs = jobs
+		withJobs[i].Jobs = make([]jobResult, len(jobs))
+		for k, j := range jobs {
+			withJobs[i].Jobs[k] = jobResult{Job: j, Failed: r.Status == "completed" && (j.Conclusion == "failure" || j.Conclusion == "timed_out")}
+		}
 		jobsApp.Retries = a.Retries // a call got through, so the network is back: full retries again
+	}
+
+	if err := a.failingTests(ctx, withJobs, stderr); err != nil { // Ctrl-C: no partial table
+		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
+		return ExitUnchecked
 	}
 
 	if opts.json {
 		err = writeJSON(stdout, sha, followed, withJobs)
 	} else {
-		err = writeTable(stdout, withJobs)
+		err = writeTable(stdout, withJobs, a.MaxTestLines)
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
@@ -178,9 +190,52 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 // listed, and JobsErr then says why.
 type runWithJobs struct {
 	gh.Run
-	Jobs         []gh.Job
+	Jobs         []jobResult
 	JobsErr      string
 	SupersededBy string // the commit whose push cancelled the run, if one did
+}
+
+// jobResult is a job and, if it failed in a completed run, its failing tests.
+// TestsErr says why they couldn't be fetched; Tests is then empty.
+type jobResult struct {
+	gh.Job
+	Failed   bool // the job failed in a completed run, so its log was fetched
+	Tests    []testlog.Failure
+	TestsErr string
+}
+
+// failingTests fetches the failed-step log of each failed job and parses it,
+// retrying like the jobs fetch. It returns an error only when ctx is cancelled.
+func (a App) failingTests(ctx context.Context, runs []runWithJobs, stderr io.Writer) error {
+	logApp := a
+	for i, r := range runs {
+		for k, j := range r.Jobs {
+			if !j.Failed {
+				continue
+			}
+			log, err := retry(ctx, logApp, stderr, fmt.Sprintf("gh run view %d --job %d", r.ID, j.ID), func() ([]byte, error) {
+				return a.GH.FailedLog(ctx, r.ID, j.ID)
+			})
+			if err != nil && ctx.Err() != nil {
+				return err
+			}
+			if err == nil {
+				var res testlog.Result
+				if res, err = testlog.Parse(bytes.NewReader(log)); err == nil {
+					runs[i].Jobs[k].Tests = res.Failures
+					logApp.Retries = a.Retries // a call got through, so the network is back
+					continue
+				}
+				err = fmt.Errorf("reading the log of job %d: %w", j.ID, err)
+			}
+			_, _ = fmt.Fprintf(stderr, "ciwatch: can't fetch failing tests for job %d (%s) of run %d (%s): %v\n", j.ID, j.Name, r.ID, r.Workflow, err)
+			runs[i].Jobs[k].TestsErr = err.Error()
+			if errors.Is(err, gh.ErrNetwork) || errors.Is(err, gh.ErrTemporary) {
+				logApp.Retries = 0 // as for jobs: the network is likely still down
+			}
+		}
+	}
+	return nil
 }
 
 var errUsage = errors.New("usage")
@@ -489,7 +544,7 @@ func exitCode(runs []gh.Run) (code, pending int) {
 	return ExitOK, 0
 }
 
-func writeTable(w io.Writer, runs []runWithJobs) error {
+func writeTable(w io.Writer, runs []runWithJobs, maxLines int) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "WORKFLOW\tSTATUS\tCONCLUSION")
 	for _, r := range runs {
@@ -505,7 +560,51 @@ func writeTable(w io.Writer, runs []runWithJobs) error {
 			_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\n", j.Name, j.Status, j.Conclusion)
 		}
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	// The blocks are free-form, so they follow the flush, not the columns.
+	for _, r := range runs {
+		for _, j := range r.Jobs {
+			if j.Failed {
+				writeFailureBlock(w, r, j, maxLines)
+			}
+		}
+	}
+	return nil
+}
+
+// writeFailureBlock writes the failing tests of the failed job j of r, with at
+// most maxLines lines of each (all of them if maxLines is 0).
+func writeFailureBlock(w io.Writer, r runWithJobs, j jobResult, maxLines int) {
+	_, _ = fmt.Fprintf(w, "\n%s (%s, run %d):\n", j.Name, r.Workflow, r.ID)
+	switch {
+	case j.TestsErr != "":
+		_, _ = fmt.Fprintln(w, "  (failing tests unavailable)")
+	case len(j.Tests) == 0:
+		_, _ = fmt.Fprintln(w, "  (no failing tests found in the log)")
+	}
+	for _, f := range j.Tests {
+		head := "  FAIL"
+		if f.Package != "" {
+			head += " " + f.Package
+		}
+		head += " " + f.Name
+		if f.RunningTest != "" {
+			head += ": crashed while running " + f.RunningTest
+		}
+		_, _ = fmt.Fprintln(w, head)
+		lines := f.Lines
+		if maxLines > 0 && len(lines) > maxLines {
+			lines = lines[:maxLines]
+		}
+		for _, l := range lines {
+			_, _ = fmt.Fprintln(w, "  "+l)
+		}
+		if more := len(f.Lines) - len(lines); more > 0 {
+			_, _ = fmt.Fprintf(w, "  … %d more lines (--json has them all)\n", more)
+		}
+	}
 }
 
 type jsonJob struct {
@@ -514,6 +613,16 @@ type jsonJob struct {
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`
 	URL        string `json:"url"`
+
+	Tests      *[]jsonTest `json:"tests,omitempty"` // only for a failed job whose log was read
+	TestsError string      `json:"tests_error,omitempty"`
+}
+
+type jsonTest struct {
+	Package     string   `json:"package"`
+	Name        string   `json:"name"`
+	Lines       []string `json:"lines"`
+	RunningTest string   `json:"running_test,omitempty"`
 }
 
 type jsonRun struct {
@@ -537,7 +646,14 @@ func writeJSON(w io.Writer, sha string, followed []string, runs []runWithJobs) e
 	for i, r := range runs {
 		jobs := make([]jsonJob, len(r.Jobs))
 		for k, j := range r.Jobs {
-			jobs[k] = jsonJob(j)
+			jobs[k] = jsonJob{ID: j.ID, Name: j.Name, Status: j.Status, Conclusion: j.Conclusion, URL: j.URL, TestsError: j.TestsErr}
+			if j.Failed && j.TestsErr == "" {
+				tests := make([]jsonTest, len(j.Tests))
+				for n, f := range j.Tests {
+					tests[n] = jsonTest{Package: f.Package, Name: f.Name, Lines: append([]string{}, f.Lines...), RunningTest: f.RunningTest}
+				}
+				jobs[k].Tests = &tests
+			}
 		}
 		out.Runs[i] = jsonRun{ID: r.ID, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr, SupersededBy: r.SupersededBy}
 	}
