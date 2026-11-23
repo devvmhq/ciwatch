@@ -39,11 +39,13 @@ type Run struct {
 // FetchedTo is where --fetch-crashes put it, relative to the checkout;
 // FetchError says why it didn't.
 type FuzzCrash struct {
-	Target     string `json:"target"`
-	Artifact   string `json:"artifact"`
-	RunID      int64  `json:"run_id"`
-	FetchedTo  string `json:"fetched_to,omitempty"`
-	FetchError string `json:"fetch_error,omitempty"`
+	Target    string `json:"target"`
+	Artifact  string `json:"artifact"`
+	RunID     int64  `json:"run_id"`
+	FetchedTo string `json:"fetched_to,omitempty"`
+	// AlreadyPresent is set when every file of the artifact was already in FetchedTo.
+	AlreadyPresent bool   `json:"already_present,omitempty"`
+	FetchError     string `json:"fetch_error,omitempty"`
 }
 
 // NewerRun is the first run of a cancelled run's workflow on its branch created
@@ -107,7 +109,7 @@ func buildReport(sha string, runs []runWithJobs, goTests bool) Report {
 		}
 		out.Runs[i] = Run{ID: r.ID, Attempt: r.Attempt, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr, ArtifactsError: r.ArtifactsErr}
 		for _, c := range r.Crashes {
-			out.Runs[i].FuzzCrashes = append(out.Runs[i].FuzzCrashes, FuzzCrash{Target: c.Target, Artifact: c.Artifact, RunID: r.ID, FetchedTo: c.FetchedTo, FetchError: c.FetchErr})
+			out.Runs[i].FuzzCrashes = append(out.Runs[i].FuzzCrashes, FuzzCrash{Target: c.Target, Artifact: c.Artifact, RunID: r.ID, FetchedTo: c.FetchedTo, AlreadyPresent: c.AlreadyPresent, FetchError: c.FetchErr})
 		}
 		if r.Newer != nil {
 			out.Runs[i].NewerRun = &NewerRun{ID: r.Newer.ID, SHA: r.Newer.HeadSHA}
@@ -160,6 +162,8 @@ func (rep Report) WriteTable(w io.Writer, maxLines int) error {
 			}
 			line := fmt.Sprintf("  %s (%s, run %d)", c.Target, c.Artifact, c.RunID)
 			switch {
+			case c.AlreadyPresent:
+				line += ": already present in " + c.FetchedTo
 			case c.FetchedTo != "":
 				line += ": fetched to " + c.FetchedTo
 			case c.FetchError != "":

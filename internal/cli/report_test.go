@@ -110,6 +110,8 @@ func walkFields(prefix string, st reflect.Type, out map[string]string) {
 			walkFields(path+".", ft, out)
 		case ft.Kind() == reflect.String:
 			out[path] = "string"
+		case ft.Kind() == reflect.Bool:
+			out[path] = "boolean"
 		case ft.Kind() >= reflect.Int && ft.Kind() <= reflect.Int64:
 			out[path] = "integer"
 		default:

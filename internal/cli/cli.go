@@ -40,7 +40,8 @@ if there is one, and the command to watch it. A failed job shows the last
 lines of each failed step; with --go-tests, it also shows the failing Go tests
 found in its log. A failed run's crash-<Target> artifacts are listed as fuzz
 crash inputs; with --fetch-crashes, each is downloaded into
-testdata/fuzz/<Target>/ beside the test file that declares the target. With
+testdata/fuzz/<Target>/ beside the test file that declares the target; a file
+that is already there is left alone and reported as already present. With
 --rerun-failed, the failed jobs of each failed run are rerun once, ciwatch
 waits for the new attempts, and the report is of those.
 `
@@ -70,6 +71,7 @@ type App struct {
 	MaxTestLines int // the most lines of one failing test the table shows; 0 shows them all
 
 	OpenDir func(string) fs.FS // opens the checkout at a directory; os.DirFS if nil
+	TempDir string             // the parent of the staging directories for downloads; os.TempDir() if empty
 }
 
 // New returns an App that runs the real gh and git.
@@ -203,6 +205,11 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			_, _ = fmt.Fprintf(stderr, "ciwatch: %d runs failed; to rerun their failed jobs: ciwatch --rerun-failed %s\n", n, sha)
 		}
 	}
+	if opts.fetchCrashes {
+		if hint := fetchHint(sha, withJobs); hint != "" {
+			_, _ = fmt.Fprintln(stderr, hint)
+		}
+	}
 	if code == ExitOK && len(runs) >= gh.RunListLimit {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: gh listed %d runs, the most it returns, so there may be more; can't vouch for a pass\n", len(runs))
 		return ExitUnchecked
@@ -223,11 +230,14 @@ type runWithJobs struct {
 }
 
 // crash is a crash-<Target> artifact. FetchedTo is the directory it was
-// downloaded to, relative to the checkout; FetchErr says why it wasn't.
+// downloaded to, or already was in, relative to the checkout; FetchErr says why
+// it wasn't fetched, and failKind which next step the closing hint names.
 type crash struct {
 	Target, Artifact string
 	FetchedTo        string
+	AlreadyPresent   bool // every file of the artifact was already in FetchedTo
 	FetchErr         string
+	failKind         failKind
 }
 
 var crashName = regexp.MustCompile(`^crash-(Fuzz[A-Za-z0-9_]*)$`)
@@ -302,39 +312,199 @@ func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Wri
 			}
 			if rootErr != nil {
 				fail(rootErr.Error())
+				runs[i].Crashes[k].failKind = failNoCheckout
 				continue
 			}
 			files, err := fuzztarget.Declaring(fsys, c.Target)
 			switch {
 			case err != nil:
 				fail(fmt.Sprintf("looking for %s in the checkout: %v", c.Target, err))
+				runs[i].Crashes[k].failKind = failRetry
 				continue
 			case len(files) == 0:
 				fail(fmt.Sprintf("no _test.go file declares func %s(f *testing.F)", c.Target))
+				runs[i].Crashes[k].failKind = failNoDecl
 				continue
 			case len(files) > 1:
 				fail(fmt.Sprintf("%s is declared in %s", c.Target, strings.Join(files, ", ")))
+				runs[i].Crashes[k].failKind = failManyDecl
 				continue
 			}
 			rel := path.Join(path.Dir(files[0]), "testdata", "fuzz", c.Target)
-			_, err = retry(ctx, dlApp, stderr, fmt.Sprintf("gh run download %d -n %s", r.ID, c.Artifact), func() (struct{}, error) {
-				return struct{}{}, a.GH.DownloadArtifact(ctx, r.ID, c.Artifact, filepath.Join(root, filepath.FromSlash(rel)))
-			})
+			written, present, err := a.stageAndPlace(ctx, dlApp, stderr, r.ID, c.Artifact, filepath.Join(root, filepath.FromSlash(rel)))
 			if err != nil && ctx.Err() != nil {
 				return err
 			}
 			if err != nil {
 				fail(err.Error())
+				runs[i].Crashes[k].failKind = failRetry
 				if errors.Is(err, gh.ErrNetwork) || errors.Is(err, gh.ErrTemporary) {
 					dlApp.Retries = 0
 				}
 				continue
 			}
 			dlApp.Retries = a.Retries
+			if written == 0 && present == 0 {
+				fail(fmt.Sprintf("artifact %s has no files", c.Artifact))
+				runs[i].Crashes[k].failKind = failRetry
+				continue
+			}
 			runs[i].Crashes[k].FetchedTo = rel
+			runs[i].Crashes[k].AlreadyPresent = written == 0
 		}
 	}
 	return nil
+}
+
+// stageAndPlace downloads the artifact into a new, empty directory under
+// a.TempDir, copies its files into dst, and removes the directory again.
+func (a App) stageAndPlace(ctx context.Context, dlApp App, stderr io.Writer, runID int64, artifact, dst string) (written, present int, err error) {
+	stage, err := os.MkdirTemp(a.TempDir, "ciwatch-crash-")
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { _ = os.RemoveAll(stage) }()
+	_, err = retry(ctx, dlApp, stderr, fmt.Sprintf("gh run download %d -n %s", runID, artifact), func() (struct{}, error) {
+		// Every attempt starts from an empty directory: gh won't overwrite what a failed attempt extracted.
+		if err := os.RemoveAll(stage); err != nil {
+			return struct{}{}, err
+		}
+		if err := os.Mkdir(stage, 0o700); err != nil {
+			return struct{}{}, err
+		}
+		return struct{}{}, a.GH.DownloadArtifact(ctx, runID, artifact, stage)
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return placeFiles(stage, dst)
+}
+
+// placeFiles copies each regular file under stage to the same path under dst,
+// creating it only if it doesn't exist; a file that exists is counted as
+// present and left alone. If a copy fails it removes the files it created, so
+// the checkout is as it was.
+func placeFiles(stage, dst string) (written, present int, err error) {
+	var created []string
+	defer func() {
+		if err != nil {
+			for _, p := range created {
+				_ = os.Remove(p)
+			}
+			written = 0
+		}
+	}()
+	err = filepath.WalkDir(stage, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || !d.Type().IsRegular() {
+			return err
+		}
+		rel, err := filepath.Rel(stage, p)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+			return err
+		}
+		out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) //nolint:gosec // a crash input is committed with the repository, so it's readable like its other files
+		if errors.Is(err, fs.ErrExist) {
+			present++
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := copyFile(out, p); err != nil {
+			_ = os.Remove(target)
+			return err
+		}
+		created = append(created, target)
+		written++
+		return nil
+	})
+	return written, present, err
+}
+
+// copyFile copies the file at src into out and closes out.
+func copyFile(out *os.File, src string) error {
+	in, err := os.Open(src) //nolint:gosec // src is a file of the staging directory ciwatch made
+	if err != nil {
+		_ = out.Close()
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+// failKind is why a crash input wasn't fetched, which decides the hint.
+type failKind int
+
+const (
+	failNone failKind = iota
+	failNoDecl
+	failManyDecl
+	failNoCheckout
+	failRetry
+)
+
+// crashRef is a crash and the run it belongs to.
+type crashRef struct {
+	crash
+	run int64
+}
+
+// fetchHint is the line that ends stderr when crash inputs were not fetched:
+// what to do next. It is empty if every input was fetched or is present.
+func fetchHint(sha string, runs []runWithJobs) string {
+	var failed []crashRef
+	for _, r := range runs {
+		for _, c := range r.Crashes {
+			if c.failKind != failNone {
+				failed = append(failed, crashRef{c, r.ID})
+			}
+		}
+	}
+	if len(failed) == 0 {
+		return ""
+	}
+	again := "ciwatch --fetch-crashes " + sha
+	kind := failed[0].failKind
+	same := true
+	for _, f := range failed {
+		same = same && f.failKind == kind
+	}
+	if len(failed) == 1 {
+		f := failed[0]
+		head := fmt.Sprintf("ciwatch: %s of run %d not fetched; ", f.Artifact, f.run)
+		switch kind {
+		case failNoDecl:
+			return head + fmt.Sprintf("declare func %s(f *testing.F) in a _test.go file, then run: %s", f.Target, again)
+		case failManyDecl:
+			return head + fmt.Sprintf("%s is declared in more than one file, so download it by hand: gh run download %d -n %s -D <package>/testdata/fuzz/%s", f.Target, f.run, f.Artifact, f.Target)
+		case failNoCheckout:
+			return head + "run " + again + " inside the repository's checkout"
+		case failNone, failRetry:
+		}
+		return head + "to try again: " + again
+	}
+	head := fmt.Sprintf("ciwatch: %d fuzz crash inputs not fetched; ", len(failed))
+	if !same {
+		return head + "see the warnings above, then run: " + again
+	}
+	switch kind {
+	case failNoDecl:
+		return head + "declare each target in a _test.go file, then run: " + again
+	case failManyDecl:
+		return head + "download them by hand: gh run download <run> -n <artifact> -D <package>/testdata/fuzz/<Target>"
+	case failNoCheckout:
+		return head + "run " + again + " inside the repository's checkout"
+	case failNone, failRetry:
+	}
+	return head + "to try again: " + again
 }
 
 // jobResult is a job and, if it failed in a completed run, the end of its

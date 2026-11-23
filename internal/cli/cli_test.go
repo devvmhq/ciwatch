@@ -118,12 +118,16 @@ type fakeOpts struct {
 	logErrCalls map[string]int    // job id to how many of its first log calls fail with a network error
 	onLog       func(id string)   // runs before gh run view --log-failed answers
 
-	artifacts    map[string]string // run id to the output of gh api .../artifacts: a fixture name, or JSON if it starts with {; none if absent
-	artifactsErr map[string]error  // run id to the error the artifacts call fails with
-	checkout     fstest.MapFS      // the files of the checkout the App opens
-	downloadErr  map[string]error  // artifact name to the error gh run download fails with
-	toplevelErr  error             // the error git rev-parse --show-toplevel fails with
-	rerunErr     map[string]error  // run id to the error gh run rerun fails with
+	artifacts     map[string]string            // run id to the output of gh api .../artifacts: a fixture name, or JSON if it starts with {; none if absent
+	artifactsErr  map[string]error             // run id to the error the artifacts call fails with
+	checkout      fstest.MapFS                 // the files of the checkout the App opens
+	downloadErr   map[string]error             // artifact name to the error gh run download fails with
+	root          string                       // a real directory the fake git prints as the toplevel and the App opens with os.DirFS, instead of checkout
+	downloadFiles map[string]map[string]string // artifact name to the files (name to content) gh run download writes into its -D directory
+	onDownload    func()                       // runs when gh run download is called
+	tempDir       string                       // App.TempDir, the parent of the staging directories
+	toplevelErr   error                        // the error git rev-parse --show-toplevel fails with
+	rerunErr      map[string]error             // run id to the error gh run rerun fails with
 
 	listFixtures []string      // gh run list prints these fixtures, one per call, the last repeated
 	listRaw      []string      // like listFixtures, but the output itself
@@ -186,6 +190,9 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 			if opts.toplevelErr != nil {
 				return nil, opts.toplevelErr
 			}
+			if opts.root != "" {
+				return []byte(opts.root + "\n"), nil
+			}
 			return []byte(checkoutRoot + "\n"), nil
 		case name == "git":
 			if gitErr != nil {
@@ -216,7 +223,24 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 			return nil, opts.rerunErr[args[2]]
 		case name == "gh" && len(args) == 7 && args[0] == "run" && args[1] == "download":
 			c.downloads = append(c.downloads, args)
-			return nil, opts.downloadErr[args[4]]
+			if opts.onDownload != nil {
+				opts.onDownload()
+			}
+			if err := opts.downloadErr[args[4]]; err != nil {
+				return nil, err
+			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			for name, content := range opts.downloadFiles[args[4]] {
+				if err := os.MkdirAll(filepath.Dir(filepath.Join(args[6], name)), 0o700); err != nil {
+					t.Error(err)
+				}
+				if err := os.WriteFile(filepath.Join(args[6], name), []byte(content), 0o600); err != nil {
+					t.Error(err)
+				}
+			}
+			return nil, nil
 		case name == "gh" && len(args) >= 4 && args[0] == "run" && args[1] == "list" && args[2] == "--branch":
 			c.branch++
 			if len(args) != 12 || args[6] != "--created" || args[8] != "--limit" || args[9] != "100" {
@@ -290,8 +314,12 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 	}}}
 	app.OpenDir = func(root string) fs.FS {
 		c.opened = append(c.opened, root)
+		if opts.root != "" {
+			return os.DirFS(opts.root)
+		}
 		return opts.checkout
 	}
+	app.TempDir = opts.tempDir
 	app, c.clock = withClock(app, now)
 	c.clock.hook = opts.onWait
 	c.clock.hold = opts.holdWait

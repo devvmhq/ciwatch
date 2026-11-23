@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -65,6 +66,8 @@ type jsonCrash struct {
 	RunID     int64  `json:"run_id"`
 	FetchedTo string `json:"fetched_to"`
 	FetchErr  string `json:"fetch_error"`
+
+	AlreadyPresent bool `json:"already_present"`
 }
 
 func crashesOf(t *testing.T, run map[string]json.RawMessage) (crashes []jsonCrash, keys map[string]bool) {
@@ -225,13 +228,19 @@ var fetchCheckout = fstest.MapFS{
 
 // TestFuzzFetchCrashesDownloads covers AC-3.
 func TestFuzzFetchCrashesDownloads(t *testing.T) {
-	stdout, stderr, calls := runFuzz(t, crashOf(oneCrash, fetchCheckout), cli.ExitFailed, "--fetch-crashes")
-	wantArgs := []string{"run", "download", fuzzRun, "-n", "crash-FuzzParse", "-D", "/repo/internal/p/testdata/fuzz/FuzzParse"}
-	if len(calls.downloads) != 1 || !slices.Equal(calls.downloads[0], wantArgs) {
-		t.Errorf("downloads = %q, want one: %q", calls.downloads, wantArgs)
+	opts, root, temp := realCheckout(t, nil, map[string]string{"abc": "x"})
+	stdout, stderr, calls := runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+	if len(calls.downloads) != 1 || len(calls.downloads[0]) != 7 || !slices.Equal(calls.downloads[0][:6], []string{"run", "download", fuzzRun, "-n", "crash-FuzzParse", "-D"}) {
+		t.Fatalf("downloads = %q, want one gh run download of crash-FuzzParse", calls.downloads)
 	}
-	if !slices.Equal(calls.opened, []string{checkoutRoot}) {
-		t.Errorf("opened %q, want the git toplevel %q", calls.opened, checkoutRoot)
+	if dir := calls.downloads[0][6]; filepath.Dir(dir) != temp || dir == root {
+		t.Errorf("download -D = %q, want a new directory under %q", dir, temp)
+	}
+	if got := readFile(t, filepath.Join(root, "internal/p/testdata/fuzz/FuzzParse/abc")); got != "x" {
+		t.Errorf("fetched file = %q, want the downloaded bytes", got)
+	}
+	if !slices.Equal(calls.opened, []string{root}) {
+		t.Errorf("opened %q, want the git toplevel %q", calls.opened, root)
 	}
 	want := "  FuzzParse (crash-FuzzParse, run " + fuzzRun + "): fetched to internal/p/testdata/fuzz/FuzzParse\n"
 	if !strings.HasSuffix(stdout, "\nFuzz crash inputs:\n"+want) {
@@ -244,11 +253,15 @@ func TestFuzzFetchCrashesDownloads(t *testing.T) {
 
 // TestFuzzFetchCrashesJSON covers AC-3.
 func TestFuzzFetchCrashesJSON(t *testing.T) {
-	run, stderr, _ := fuzzJSON(t, crashOf(oneCrash, fetchCheckout), "--fetch-crashes")
+	opts, _, _ := realCheckout(t, nil, map[string]string{"abc": "x"})
+	run, stderr, _ := fuzzJSON(t, opts, "--fetch-crashes")
 	crashes, keys := crashesOf(t, run)
 	want := []jsonCrash{{Target: "FuzzParse", Artifact: "crash-FuzzParse", RunID: 44729305066, FetchedTo: "internal/p/testdata/fuzz/FuzzParse"}}
 	if !reflect.DeepEqual(crashes, want) {
 		t.Errorf("fuzz_crashes = %+v, want %+v", crashes, want)
+	}
+	if keys["already_present"] {
+		t.Error("fuzz_crashes has already_present after a new file was fetched")
 	}
 	if keys["fetch_error"] {
 		t.Error("fuzz_crashes has fetch_error after a good download")
@@ -459,17 +472,298 @@ func TestFuzzMoreThan100ArtifactsWarns(t *testing.T) {
 	}
 }
 
+const (
+	fuzzDir      = "internal/p/testdata/fuzz/FuzzParse"
+	rerunHint    = "ciwatch: 1 run failed; to rerun its failed jobs: ciwatch --rerun-failed " + sha
+	fuzzTableEnd = "\nFuzz crash inputs:\n  FuzzParse (crash-FuzzParse, run " + fuzzRun + "): "
+	otherFuzzGo  = "package q\n\nimport \"testing\"\n\nfunc FuzzOther(f *testing.F) {\n}\n"
+)
+
+// realCheckout returns options whose checkout is a real directory holding
+// the files (path to content) plus the p package declaring FuzzParse, and
+// whose gh run download of crash-FuzzParse writes the download files. It
+// returns the checkout's root and the App's TempDir.
+func realCheckout(t *testing.T, files, download map[string]string) (opts fakeOpts, root, temp string) {
+	t.Helper()
+	root, temp = t.TempDir(), t.TempDir()
+	all := map[string]string{"internal/p/p_test.go": parseFuzzGo, "internal/p/p.go": "package p\n"}
+	for name, content := range files {
+		all[name] = content
+	}
+	for name, content := range all {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	opts = crashOf(oneCrash, nil)
+	opts.root, opts.tempDir = root, temp
+	opts.downloadFiles = map[string]map[string]string{"crash-FuzzParse": download}
+	return opts, root, temp
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path) //nolint:gosec // reads a file of the test's own temporary checkout
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func isEmptyDir(t *testing.T, dir string) bool {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(entries) == 0
+}
+
+// lastLines splits stderr into its lines.
+func lastLines(stderr string) []string {
+	return strings.Split(strings.TrimSuffix(stderr, "\n"), "\n")
+}
+
+// TestFuzzFetchAlreadyPresent covers AC-1 and AC-3 (no hint for an input
+// that is already present).
+func TestFuzzFetchAlreadyPresent(t *testing.T) {
+	opts, root, _ := realCheckout(t, map[string]string{fuzzDir + "/abc": "original"}, map[string]string{"abc": "different"})
+	stdout, stderr, _ := runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+	if want := fuzzTableEnd + "already present in " + fuzzDir + "\n"; !strings.HasSuffix(stdout, want) {
+		t.Errorf("stdout = %q, want it to end with %q", stdout, want)
+	}
+	if strings.Contains(stderr, "can't fetch") || strings.Contains(stderr, "--fetch-crashes") || strings.Contains(stderr, "not fetched") {
+		t.Errorf("stderr = %q, want nothing about the input", stderr)
+	}
+	if got := readFile(t, filepath.Join(root, fuzzDir, "abc")); got != "original" {
+		t.Errorf("existing file = %q, want it unchanged", got)
+	}
+
+	run, _, _ := fuzzJSON(t, opts, "--fetch-crashes")
+	crashes, keys := crashesOf(t, run)
+	if len(crashes) != 1 || crashes[0].FetchedTo != fuzzDir || !crashes[0].AlreadyPresent || keys["fetch_error"] {
+		t.Errorf("fuzz_crashes = %+v (keys %v), want fetched_to, already_present and no fetch_error", crashes, keys)
+	}
+	if want := `"fetched_to":"` + fuzzDir + `","already_present":true`; !strings.Contains(string(run["fuzz_crashes"]), want) {
+		t.Errorf("fuzz_crashes = %s, want it to contain %s", run["fuzz_crashes"], want)
+	}
+}
+
+// TestFuzzFetchNewFile covers AC-2: a new file is written, an existing one
+// is left alone, and the missing directory is created.
+func TestFuzzFetchNewFile(t *testing.T) {
+	opts, root, _ := realCheckout(t, map[string]string{fuzzDir + "/abc": "original"}, map[string]string{"abc": "different", "def": "new"})
+	stdout, stderr, _ := runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+	if want := fuzzTableEnd + "fetched to " + fuzzDir + "\n"; !strings.HasSuffix(stdout, want) {
+		t.Errorf("stdout = %q, want it to end with %q", stdout, want)
+	}
+	if strings.Contains(stderr, "--fetch-crashes") {
+		t.Errorf("stderr = %q, want no hint", stderr)
+	}
+	if got := readFile(t, filepath.Join(root, fuzzDir, "def")); got != "new" {
+		t.Errorf("new file = %q, want the downloaded bytes", got)
+	}
+	if got := readFile(t, filepath.Join(root, fuzzDir, "abc")); got != "original" {
+		t.Errorf("existing file = %q, want it unchanged", got)
+	}
+	// The first run wrote def, so the JSON run starts from a fresh checkout.
+	jsonOpts, _, _ := realCheckout(t, map[string]string{fuzzDir + "/abc": "original"}, map[string]string{"abc": "different", "def": "new"})
+	run, _, _ := fuzzJSON(t, jsonOpts, "--fetch-crashes")
+	if _, keys := crashesOf(t, run); keys["already_present"] || keys["fetch_error"] || !keys["fetched_to"] {
+		t.Errorf("keys = %v, want fetched_to only", keys)
+	}
+
+	// The target directory is created when it's missing.
+	fresh, freshRoot, _ := realCheckout(t, nil, map[string]string{"abc": "x"})
+	runFuzz(t, fresh, cli.ExitFailed, "--fetch-crashes")
+	if got := readFile(t, filepath.Join(freshRoot, fuzzDir, "abc")); got != "x" {
+		t.Errorf("file in the new directory = %q, want the downloaded bytes", got)
+	}
+}
+
+// TestFuzzFetchHint covers AC-3: the last stderr line says what to do next.
+func TestFuzzFetchHint(t *testing.T) {
+	gone := errors.New("gh: exit status 1: HTTP 410: Gone (https://api.github.com/repos/o/r/actions/artifacts/1/zip)")
+	two := `{"total_count":2,"artifacts":[{"name":"crash-FuzzParse"},{"name":"crash-FuzzOther"}]}`
+	retry := "ciwatch --fetch-crashes " + sha
+	tests := []struct {
+		name  string
+		setup func(o *fakeOpts)
+		want  string
+	}{
+		{"no declaration", func(o *fakeOpts) {
+			o.downloadFiles = nil
+			if err := os.Remove(filepath.Join(o.root, "internal/p/p_test.go")); err != nil {
+				t.Fatal(err)
+			}
+		}, "ciwatch: crash-FuzzParse of run " + fuzzRun + " not fetched; declare func FuzzParse(f *testing.F) in a _test.go file, then run: " + retry},
+		{"two declarations", func(o *fakeOpts) {
+			if err := os.WriteFile(filepath.Join(o.root, "internal/p/q_test.go"), []byte(parseFuzzGo), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}, "ciwatch: crash-FuzzParse of run " + fuzzRun + " not fetched; FuzzParse is declared in more than one file, so download it by hand: gh run download " + fuzzRun + " -n crash-FuzzParse -D <package>/testdata/fuzz/FuzzParse"},
+		{"no checkout", func(o *fakeOpts) {
+			o.toplevelErr = errors.New("fatal: not a git repository")
+		}, "ciwatch: crash-FuzzParse of run " + fuzzRun + " not fetched; run ciwatch --fetch-crashes " + sha + " inside the repository's checkout"},
+		{"download failed", func(o *fakeOpts) {
+			o.downloadErr = map[string]error{"crash-FuzzParse": gone}
+		}, "ciwatch: crash-FuzzParse of run " + fuzzRun + " not fetched; to try again: " + retry},
+		{"two with the same reason", func(o *fakeOpts) {
+			o.artifacts = map[string]string{fuzzRun: two}
+			o.downloadErr = map[string]error{"crash-FuzzParse": gone, "crash-FuzzOther": gone}
+			writeOther(t, o.root)
+		}, "ciwatch: 2 fuzz crash inputs not fetched; to try again: " + retry},
+		{"two with different reasons", func(o *fakeOpts) {
+			o.artifacts = map[string]string{fuzzRun: two}
+			o.downloadErr = map[string]error{"crash-FuzzParse": gone}
+			// FuzzOther is declared nowhere.
+		}, "ciwatch: 2 fuzz crash inputs not fetched; see the warnings above, then run: " + retry},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, _, _ := realCheckout(t, nil, map[string]string{"abc": "x"})
+			tt.setup(&opts)
+			_, stderr, _ := runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+			lines := lastLines(stderr)
+			if len(lines) < 3 {
+				t.Fatalf("stderr = %q, want warnings, the rerun hint and the fetch hint", stderr)
+			}
+			if got := lines[len(lines)-1]; got != tt.want {
+				t.Errorf("last stderr line = %q, want %q", got, tt.want)
+			}
+			if got := lines[len(lines)-2]; got != rerunHint {
+				t.Errorf("line before it = %q, want the rerun hint %q", got, rerunHint)
+			}
+			if !strings.Contains(stderr, "ciwatch: can't fetch crash-FuzzParse of run "+fuzzRun+": ") {
+				t.Errorf("stderr = %q, want the per-input warning above the hint", stderr)
+			}
+		})
+	}
+}
+
+func writeOther(t *testing.T, root string) {
+	t.Helper()
+	path := filepath.Join(root, "internal/q/q_test.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(otherFuzzGo), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFuzzFetchEmptyArtifact covers AC-4.
+func TestFuzzFetchEmptyArtifact(t *testing.T) {
+	opts, _, _ := realCheckout(t, nil, nil)
+	stdout, stderr, _ := runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+	if want := fuzzTableEnd + "not fetched\n"; !strings.HasSuffix(stdout, want) {
+		t.Errorf("stdout = %q, want it to end with %q", stdout, want)
+	}
+	if want := "ciwatch: crash-FuzzParse of run " + fuzzRun + " not fetched; to try again: ciwatch --fetch-crashes " + sha; !strings.HasSuffix(stderr, want+"\n") {
+		t.Errorf("stderr = %q, want it to end with %q", stderr, want)
+	}
+	run, _, _ := fuzzJSON(t, opts, "--fetch-crashes")
+	crashes, keys := crashesOf(t, run)
+	if len(crashes) != 1 || crashes[0].FetchErr != "artifact crash-FuzzParse has no files" || keys["fetched_to"] {
+		t.Errorf("fuzz_crashes = %+v (keys %v), want the fetch_error and no fetched_to", crashes, keys)
+	}
+}
+
+// TestFuzzFetchLeavesNoStaging covers AC-5: a failed or interrupted
+// download leaves the checkout unchanged and the staging directory removed.
+func TestFuzzFetchLeavesNoStaging(t *testing.T) {
+	t.Run("download fails", func(t *testing.T) {
+		opts, root, temp := realCheckout(t, nil, map[string]string{"abc": "x"})
+		opts.downloadErr = map[string]error{"crash-FuzzParse": errors.New("gh: exit status 1: HTTP 410: Gone")}
+		runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+		if !isEmptyDir(t, temp) {
+			t.Errorf("TempDir %q is not empty", temp)
+		}
+		if _, err := os.Stat(filepath.Join(root, "internal/p/testdata")); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("checkout has testdata after a failed download (stat error %v)", err)
+		}
+	})
+	t.Run("interrupted", func(t *testing.T) {
+		opts, root, temp := realCheckout(t, nil, map[string]string{"abc": "x"})
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		opts.onDownload = cancel
+		app, _ := fakeWith(t, "run-list-failure.json", nil, nil, opts)
+		var out, errOut bytes.Buffer
+		if code := app.Run(ctx, []string{"--fetch-crashes", "HEAD"}, &out, &errOut); code != cli.ExitUnchecked {
+			t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, errOut.String())
+		}
+		if out.Len() != 0 {
+			t.Errorf("stdout = %q, want no table", out.String())
+		}
+		if !isEmptyDir(t, temp) {
+			t.Errorf("TempDir %q is not empty", temp)
+		}
+		if _, err := os.Stat(filepath.Join(root, "internal/p/testdata")); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("checkout has testdata after an interrupted download (stat error %v)", err)
+		}
+	})
+}
+
+// TestFuzzFetchCopyFailureLeavesCheckoutUnchanged covers AC-5's promise that
+// a failed fetch leaves the checkout unchanged, when the copy fails partway.
+func TestFuzzFetchCopyFailureLeavesCheckoutUnchanged(t *testing.T) {
+	// "sub" is a file in the target directory, so sub/b can't be written after a.
+	opts, root, temp := realCheckout(t, map[string]string{fuzzDir + "/sub": "file"}, map[string]string{"a": "x", "sub/b": "y"})
+	stdout, stderr, _ := runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+	if want := fuzzTableEnd + "not fetched\n"; !strings.HasSuffix(stdout, want) {
+		t.Errorf("stdout = %q, want it to end with %q", stdout, want)
+	}
+	if want := "to try again: ciwatch --fetch-crashes " + sha + "\n"; !strings.HasSuffix(stderr, want) {
+		t.Errorf("stderr = %q, want it to end with %q", stderr, want)
+	}
+	if _, err := os.Stat(filepath.Join(root, fuzzDir, "a")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("file a was left in the checkout (stat error %v)", err)
+	}
+	if !isEmptyDir(t, temp) {
+		t.Errorf("TempDir %q is not empty", temp)
+	}
+}
+
+// TestFuzzFetchExitCode covers AC-4's sibling AC-6: the exit code comes from
+// the runs alone.
+func TestFuzzFetchExitCode(t *testing.T) {
+	tests := []struct {
+		name  string
+		files map[string]string
+	}{
+		{"already present", map[string]string{fuzzDir + "/abc": "original"}},
+		{"fetched", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, _, _ := realCheckout(t, tt.files, map[string]string{"abc": "x"})
+			runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+		})
+	}
+	t.Run("not fetched", func(t *testing.T) {
+		opts, _, _ := realCheckout(t, nil, map[string]string{"abc": "x"})
+		opts.downloadErr = map[string]error{"crash-FuzzParse": errors.New("gh: exit status 1: HTTP 410: Gone")}
+		runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+	})
+}
+
 // TestJSONDocumentsFuzzFields covers AC-2: the new fields are in cli.Report
 // and in docs/json.md.
 func TestJSONDocumentsFuzzFields(t *testing.T) {
 	want := map[string]string{
-		"runs[].fuzz_crashes":               "array of objects",
-		"runs[].fuzz_crashes[].target":      "string",
-		"runs[].fuzz_crashes[].artifact":    "string",
-		"runs[].fuzz_crashes[].run_id":      "integer",
-		"runs[].fuzz_crashes[].fetched_to":  "string",
-		"runs[].fuzz_crashes[].fetch_error": "string",
-		"runs[].artifacts_error":            "string",
+		"runs[].fuzz_crashes":                   "array of objects",
+		"runs[].fuzz_crashes[].target":          "string",
+		"runs[].fuzz_crashes[].artifact":        "string",
+		"runs[].fuzz_crashes[].run_id":          "integer",
+		"runs[].fuzz_crashes[].fetched_to":      "string",
+		"runs[].fuzz_crashes[].fetch_error":     "string",
+		"runs[].fuzz_crashes[].already_present": "boolean",
+		"runs[].artifacts_error":                "string",
 	}
 	have := map[string]string{}
 	walkFields("", reflect.TypeFor[cli.Report](), have)
