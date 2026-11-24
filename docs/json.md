@@ -59,3 +59,5 @@ Schema 1 is not frozen yet: it freezes at ciwatch's first release, and until the
 | 2 | usage error |
 | 3 | a run was cancelled |
 | 4 | ciwatch could not check |
+
+With `--rerun-failed`, a rerun run that is no longer listed counts at its last known state.

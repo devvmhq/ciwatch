@@ -34,10 +34,11 @@ type counts struct {
 	list    int
 	view    int
 	viewIDs []string
-	branch  int      // gh run list --branch calls
-	logs    int      // gh run view --log-failed calls
-	logIDs  []string // the job ids of those calls, in order
-	events  []string // "list" and "view", in the order gh ran them
+	attempt map[string]string // the --attempt a gh run view was given, by run id
+	branch  int               // gh run list --branch calls
+	logs    int               // gh run view --log-failed calls
+	logIDs  []string          // the job ids of those calls, in order
+	events  []string          // "list" and "view", in the order gh ran them
 	clock   *fakeClock
 
 	artifactIDs []string   // the run ids of the gh api artifacts calls, in order
@@ -289,12 +290,20 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 				return readLog(t, f), nil
 			}
 			return nil, nil
-		case name == "gh" && len(args) == 5 && args[0] == "run" && args[1] == "view":
+		case name == "gh" && (len(args) == 5 || len(args) == 7) && args[0] == "run" && args[1] == "view":
 			id := args[2]
 			c.view++
 			c.events = append(c.events, "view")
 			c.viewIDs = append(c.viewIDs, id)
-			if want := []string{"run", "view", id, "--json", "jobs"}; !reflect.DeepEqual(args, want) {
+			want := []string{"run", "view", id, "--json", "jobs"}
+			if len(args) == 7 {
+				if c.attempt == nil {
+					c.attempt = map[string]string{}
+				}
+				c.attempt[id] = args[4]
+				want = []string{"run", "view", id, "--attempt", args[4], "--json", "jobs"}
+			}
+			if !reflect.DeepEqual(args, want) {
 				t.Errorf("gh args = %q, want %q", args, want)
 			}
 			if opts.onView != nil {

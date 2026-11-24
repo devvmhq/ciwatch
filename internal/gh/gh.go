@@ -202,7 +202,17 @@ func (r Runner) RunJobs(ctx context.Context, runID int64) ([]Job, error) {
 // runID, each with its steps. gh can't narrow the fields inside a job, so the
 // one call gives both.
 func (r Runner) RunJobsWithSteps(ctx context.Context, runID int64) ([]JobSteps, error) {
-	out, err := r.Exec(ctx, "gh", "run", "view", strconv.FormatInt(runID, 10), "--json", "jobs")
+	return r.RunJobsAttempt(ctx, runID, 0)
+}
+
+// RunJobsAttempt is RunJobsWithSteps for the given attempt of the run; an
+// attempt below 1 means the latest.
+func (r Runner) RunJobsAttempt(ctx context.Context, runID int64, attempt int) ([]JobSteps, error) {
+	args := []string{"run", "view", strconv.FormatInt(runID, 10)}
+	if attempt > 0 {
+		args = append(args, "--attempt", strconv.Itoa(attempt))
+	}
+	out, err := r.Exec(ctx, "gh", append(args, "--json", "jobs")...)
 	if err != nil {
 		return nil, fmt.Errorf("gh run view %d: %w", runID, markNetwork(err))
 	}

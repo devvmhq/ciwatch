@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -315,5 +316,161 @@ func TestJSONGoldenAfterRerun(t *testing.T) {
 	}
 	if stdout.String() != string(want) {
 		t.Errorf("output differs from the golden file:\n got: %s\nwant: %s", stdout.String(), want)
+	}
+}
+
+// runVanish is runRerun under a context that is cancelled at the cancelAt-th
+// wait of the fake clock, so a watch that never ends fails instead of hanging.
+func runVanish(t *testing.T, opts fakeOpts, wantCode, cancelAt int, args ...string) (stdout, stderr string, calls *counts) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	waits := 0
+	opts.onWait = func() {
+		if waits++; waits == cancelAt {
+			cancel()
+		}
+	}
+	app, calls := fakeWith(t, "", nil, nil, opts)
+	var out, errOut bytes.Buffer
+	if code := app.Run(ctx, append(args, "HEAD"), &out, &errOut); code != wantCode {
+		t.Fatalf("exit code = %d, want %d (stdout %q, stderr %q)", code, wantCode, out.String(), errOut.String())
+	}
+	return out.String(), errOut.String(), calls
+}
+
+const unlistedCI = "ciwatch: run " + ciRun + " (CI) is no longer listed for this commit; not waiting for it\n"
+
+// rowFields is the fields of the table row of a workflow, nil if absent.
+func rowFields(stdout, workflow string) []string {
+	for _, l := range strings.Split(stdout, "\n") {
+		if f := strings.Fields(l); len(f) > 0 && !strings.HasPrefix(l, " ") && f[0] == workflow {
+			return f
+		}
+	}
+	return nil
+}
+
+func checkRow(t *testing.T, stdout, workflow string, want ...string) {
+	t.Helper()
+	if got := rowFields(stdout, workflow); !slices.Equal(got, append([]string{workflow}, want...)) {
+		t.Errorf("%s row = %q, want %q (stdout %q)", workflow, got, want, stdout)
+	}
+}
+
+// TestRerunVanishesBeforeNewAttempt covers AC-1 and AC-2.
+func TestRerunVanishesBeforeNewAttempt(t *testing.T) {
+	opts := fakeOpts{listRaw: lists(list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(passed(docsRun, "Docs", 1)),
+	)}
+	stdout, stderr, calls := runVanish(t, opts, cli.ExitFailed, 30, "--rerun-failed")
+	if n := strings.Count(stderr, unlistedCI); n != 1 {
+		t.Errorf("stderr = %q, want the warning once, got %d", stderr, n)
+	}
+	if calls.list != 9 {
+		t.Errorf("gh run list calls = %d, want 9: it stops at the first poll without the run", calls.list)
+	}
+	checkTable(t, stdout, slices.Concat(
+		[]row{runRow("CI", "completed", "failure")}, jobRowsOf(t, "run-view-"+ciRun+".json"),
+		[]row{runRow("Docs", "completed", "success")}, jobRowsOf(t, "run-view-"+docsRun+".json"),
+	))
+	if strings.Contains(stderr, "--rerun-failed") {
+		t.Errorf("stderr = %q, want no rerun hint", stderr)
+	}
+	// GitHub holds attempt 2 of the missing run by now, so its jobs are asked
+	// for by attempt; the run that was listed is asked for as before.
+	if got := calls.attempt[ciRun]; got != "1" {
+		t.Errorf("gh run view --attempt for the missing run = %q, want 1", got)
+	}
+	if got, ok := calls.attempt[docsRun]; ok {
+		t.Errorf("gh run view --attempt for the listed run = %q, want none", got)
+	}
+}
+
+// TestRerunVanishesInProgress covers AC-3.
+func TestRerunVanishesInProgress(t *testing.T) {
+	opts := fakeOpts{listRaw: lists(list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(attemptRun(ciRun, "CI", "in_progress", "", 2), passed(docsRun, "Docs", 1)),
+		list(passed(docsRun, "Docs", 1)),
+	)}
+	stdout, stderr, _ := runVanish(t, opts, cli.ExitUnchecked, 30, "--rerun-failed")
+	if !strings.Contains(stderr, unlistedCI) {
+		t.Errorf("stderr = %q, want the warning", stderr)
+	}
+	if strings.Contains(stderr, "drop --once") {
+		t.Errorf("stderr = %q, want no advice to drop --once", stderr)
+	}
+	checkRow(t, stdout, "CI", "in_progress")
+}
+
+// TestRerunVanishesOtherStillWaited covers AC-4.
+func TestRerunVanishesOtherStillWaited(t *testing.T) {
+	opts := fakeOpts{listRaw: lists(list(failed(ciRun2, "CI", 1), failed(docsRun, "Docs", 1)),
+		list(failed(ciRun2, "CI", 1), failed(docsRun, "Docs", 1)),
+		list(attemptRun(docsRun, "Docs", "in_progress", "", 2)),
+		list(passed(docsRun, "Docs", 2)),
+	)}
+	stdout, stderr, calls := runVanish(t, opts, cli.ExitFailed, 30, "--rerun-failed")
+	if want := []string{ciRun2, docsRun}; !slices.Equal(calls.reruns, want) {
+		t.Fatalf("gh run rerun calls for %q, want %q", calls.reruns, want)
+	}
+	if want := "ciwatch: run " + ciRun2 + " (CI) is no longer listed for this commit; not waiting for it\n"; !strings.Contains(stderr, want) {
+		t.Errorf("stderr = %q, want it to contain %q", stderr, want)
+	}
+	if calls.list != 10 {
+		t.Errorf("gh run list calls = %d, want 10: it waits for the Docs run's new attempt", calls.list)
+	}
+	checkRow(t, stdout, "CI", "completed", "failure")
+	checkRow(t, stdout, "Docs", "completed", "success")
+}
+
+// TestRerunReappears covers AC-5.
+func TestRerunReappears(t *testing.T) {
+	opts := fakeOpts{listRaw: lists(list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(passed(docsRun, "Docs", 1), attemptRun(fuzzRn, "Fuzz", "in_progress", "", 1)),
+		list(attemptRun(ciRun, "CI", "in_progress", "", 2), passed(docsRun, "Docs", 1), attemptRun(fuzzRn, "Fuzz", "in_progress", "", 1)),
+		list(passed(ciRun, "CI", 2), passed(docsRun, "Docs", 1), passed(fuzzRn, "Fuzz", 1)),
+	)}
+	stdout, stderr, calls := runVanish(t, opts, cli.ExitOK, 30, "--rerun-failed")
+	if n := strings.Count(stderr, unlistedCI); n != 1 {
+		t.Errorf("stderr = %q, want the warning once, got %d", stderr, n)
+	}
+	if calls.list != 11 {
+		t.Errorf("gh run list calls = %d, want 11: it waits for the run's new attempt", calls.list)
+	}
+	checkRow(t, stdout, "CI", "completed", "success")
+}
+
+// TestRerunVanishesTwice covers AC-6.
+func TestRerunVanishesTwice(t *testing.T) {
+	opts := fakeOpts{listRaw: lists(list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(passed(docsRun, "Docs", 1), attemptRun(fuzzRn, "Fuzz", "in_progress", "", 1)),
+		list(attemptRun(ciRun, "CI", "in_progress", "", 2), passed(docsRun, "Docs", 1), attemptRun(fuzzRn, "Fuzz", "in_progress", "", 1)),
+		list(passed(docsRun, "Docs", 1), attemptRun(fuzzRn, "Fuzz", "in_progress", "", 1)),
+		list(passed(docsRun, "Docs", 1), passed(fuzzRn, "Fuzz", 1)),
+	)}
+	stdout, stderr, _ := runVanish(t, opts, cli.ExitUnchecked, 30, "--rerun-failed")
+	if n := strings.Count(stderr, unlistedCI); n != 2 {
+		t.Errorf("stderr = %q, want the warning twice, got %d", stderr, n)
+	}
+	checkRow(t, stdout, "CI", "in_progress")
+}
+
+// TestRerunVanishedCtrlC covers AC-7.
+func TestRerunVanishedCtrlC(t *testing.T) {
+	opts := fakeOpts{listRaw: lists(list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(passed(docsRun, "Docs", 1), attemptRun(fuzzRn, "Fuzz", "in_progress", "", 1)),
+	)}
+	// Six waits for the first watch, then one after the warning, then Ctrl-C.
+	stdout, stderr, _ := runVanish(t, opts, cli.ExitUnchecked, 8, "--rerun-failed")
+	if n := strings.Count(stderr, unlistedCI); n != 1 {
+		t.Errorf("stderr = %q, want the warning once, got %d", stderr, n)
+	}
+	if !strings.Contains(stderr, "context canceled\n") || stdout != "" {
+		t.Errorf("stdout = %q, stderr = %q, want context canceled and no table", stdout, stderr)
 	}
 }

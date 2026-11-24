@@ -188,6 +188,19 @@ func TestRunJobsPassesRunIDAndFields(t *testing.T) {
 	}
 }
 
+func TestRunJobsAttemptPassesAttempt(t *testing.T) {
+	want := []string{"run", "view", "7", "--attempt", "1", "--json", "jobs"}
+	r := gh.Runner{Exec: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if !reflect.DeepEqual(args, want) {
+			t.Errorf("exec gh %q, want %q", args, want)
+		}
+		return []byte(`{"jobs":[]}`), nil
+	}}
+	if _, err := r.RunJobsAttempt(t.Context(), 7, 1); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRunJobsWithStepsDecodesSteps(t *testing.T) {
 	r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
 		return fixture(t, "run-view-44705166834.json"), nil
