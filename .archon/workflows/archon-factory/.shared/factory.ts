@@ -363,9 +363,15 @@ export function squashMessage(merge: string, steps: string[], spec: string[] = [
   return beforeTrailers(merge, parts.join("\n\n"));
 }
 
-// A design's "## <heading>" section, or "" when it has none.
+// A design's "## <heading>" section, or "" when it has none. It ends at the next
+// heading of any style the design steps use: a "#"/"##" heading, a line that is
+// only bold text ("**Behaviour**"), or a "---" rule.
 export function designSection(design: string, heading: string): string {
-  const m = new RegExp(`^##\\s+${heading}\\s*$([\\s\\S]*?)(?=^##\\s|(?![\\s\\S]))`, "mi").exec(design);
+  const m = new RegExp(
+    // A bold "**None.**" is an answer, not a heading.
+    `^##\\s+${heading}\\s*$([\\s\\S]*?)(?=^#{1,6}\\s|^\\*\\*(?!\\s*none\\b)[^*\\n]+\\*\\*:?\\s*$|^---+\\s*$|(?![\\s\\S]))`,
+    "mi",
+  ).exec(design);
   return m ? m[1].trim() : "";
 }
 
@@ -374,10 +380,12 @@ export function designSection(design: string, heading: string): string {
 export function inferenceNote(design: string): string {
   const inference = designSection(design, "Inference");
   if (inference === "") return "Inference: the design has no \"## Inference\" section; read it for timing or format guesses before approving.";
-  // "none", however the design formats it (`none`, **None.**, - none), and
-  // "none" followed by a sentence saying why (none. "Present" is decided by …).
-  if (/^none$/i.test(inference.replace(/[`*_.\-\s]/g, ""))) return "Inference: none.";
-  const why = /^[-*\s`_]*none[`*_]*\s*[.:;—–-]\s*([\s\S]+)$/i.exec(inference);
+  // Judged by its first paragraph: "none", however the design formats it
+  // (`none`, **None.**, - none), or "none" followed by a sentence saying why
+  // (none. "Present" is decided by …).
+  const first = inference.split(/\n\s*\n/)[0].trim();
+  if (/^none$/i.test(first.replace(/[`*_.\-\s]/g, ""))) return "Inference: none.";
+  const why = /^[-*\s`_]*none[`*_]*\s*[.:;—–-]\s*([\s\S]+)$/i.exec(first);
   if (why) return `Inference: none (${why[1].trim().replace(/\s+/g, " ")}).`;
   return `Inference: THIS DESIGN INFERS FROM TIMING OR FORMATS. It needs your own judgement:\n${inference}`;
 }

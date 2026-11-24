@@ -83,6 +83,9 @@ describe("inferenceNote", () => {
     );
     expect(inferenceNote("## Inference\n`none` — nothing is guessed.\n")).toBe("Inference: none (nothing is guessed.).");
     expect(inferenceNote("## Inference\nNone of the steps are named, so we cut by timestamps.\n")).toContain("THIS DESIGN INFERS");
+    // A design whose later sections use bold headings, not ##.
+    expect(inferenceNote("## Inference\n\nnone\n\n**Behaviour**\n\nSkips unreadable folders.\n\n**Code**\n\nx")).toBe("Inference: none.");
+    expect(inferenceNote("## Inference\n\n- Steps are cut by time.\n\n- And by markers.\n\n**Code**\n\nx")).toContain("And by markers.");
     expect(inferenceNote("## Inference\n- Steps are cut by timestamps.\n")).toContain("THIS DESIGN INFERS");
     expect(inferenceNote("## Acceptance cases\nAC-1: x\n")).toContain("has no \"## Inference\" section");
   });
@@ -154,6 +157,11 @@ describe("extractSpec", () => {
 
   test("reads a section that ends the design", () => {
     expect(extractSpec("## Acceptance cases\nAC-1: y", "")).toBe("Spec: acceptance cases\nAC-1: y\n\nSpec: non-goals\n(none stated)");
+  });
+
+  test("ends a section at a bold heading or a rule, not only at ##", () => {
+    const design = "## Acceptance cases\nAC-1: a\n\n## Non-goals\n- b\n\n**Behaviour**\nNot a non-goal.\n\n---\n\n## Inference\nnone\n";
+    expect(extractSpec(design, "")).toBe("Spec: acceptance cases\nAC-1: a\n\nSpec: non-goals\n- b\n\nSpec: inference\nnone");
   });
 
   test("refuses a design without acceptance cases", () => {
