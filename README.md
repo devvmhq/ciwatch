@@ -11,6 +11,7 @@ It isn't usable yet: the commands are being built one at a time.
 - Keep watching through network errors, retrying with backoff.
 - For a cancelled run, name the first run after it of the same workflow on the same branch, for another commit, if there is one, and print the command to watch it.
 - For a failed job, show the last 40 lines of each failed step, not the whole log, and with `--go-tests` the failing Go tests' names and the lines around them too.
+- For a cancelled job whose check-run annotation says it exceeded its maximum execution time (GitHub reports such a job as `cancelled`, never `timed_out`), say it timed out after the limit and show the last lines of the step it was in.
 - For a failed fuzz job, list the failing targets and fetch their crash inputs into `testdata/fuzz/<Target>/` when you ask.
 - Offer to rerun a flaky job's failures.
 - Exit 0 only when every run passed, with a different code for failed, cancelled, and couldn't check.

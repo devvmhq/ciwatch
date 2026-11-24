@@ -55,8 +55,8 @@ type NewerRun struct {
 	SHA string `json:"sha"`
 }
 
-// Job is one job of a run. A job with Steps or LogError is a failed one whose
-// log was fetched.
+// Job is one job of a run. A job with Steps or LogError is a failed or
+// timed-out one whose log was fetched.
 type Job struct {
 	ID         int64  `json:"id"`
 	Name       string `json:"name"`
@@ -64,9 +64,11 @@ type Job struct {
 	Conclusion string `json:"conclusion"`
 	URL        string `json:"url"`
 
-	Steps    *[]Step `json:"steps,omitempty"` // only for a failed job whose log was read
+	TimedOutAfter string `json:"timed_out_after,omitempty"` // only for a cancelled job whose annotation says it hit its time limit
+
+	Steps    *[]Step `json:"steps,omitempty"` // only for a failed or timed-out job whose log was read
 	LogError string  `json:"log_error,omitempty"`
-	Tests    *[]Test `json:"tests,omitempty"` // only with --go-tests, for a failed job whose log was read
+	Tests    *[]Test `json:"tests,omitempty"` // only with --go-tests, for a failed or timed-out job whose log was read
 }
 
 // Step is a failed step and the last lines of its log.
@@ -91,8 +93,8 @@ func buildReport(sha string, runs []runWithJobs, goTests bool) Report {
 	for i, r := range runs {
 		jobs := make([]Job, len(r.Jobs))
 		for k, j := range r.Jobs {
-			jobs[k] = Job{ID: j.ID, Name: j.Name, Status: j.Status, Conclusion: j.Conclusion, URL: j.URL, LogError: j.LogErr}
-			if j.Failed && j.LogErr == "" {
+			jobs[k] = Job{ID: j.ID, Name: j.Name, Status: j.Status, Conclusion: j.Conclusion, URL: j.URL, TimedOutAfter: j.TimedOut, LogError: j.LogErr}
+			if (j.Failed || j.TimedOut != "") && j.LogErr == "" {
 				steps := make([]Step, len(j.Steps))
 				for n, s := range j.Steps {
 					steps[n] = Step{Name: s.Name, Lines: append([]string{}, s.Lines...), Omitted: s.Omitted}
@@ -175,10 +177,14 @@ func (rep Report) WriteTable(w io.Writer, maxLines int) error {
 	return nil
 }
 
-// writeFailureBlock writes the failed steps of the failed job j of r, then its
-// failing tests if they were looked for.
+// writeFailureBlock writes the failed steps of the failed or timed-out job j of
+// r, then its failing tests if they were looked for.
 func writeFailureBlock(w io.Writer, r Run, j Job, maxLines int) {
-	_, _ = fmt.Fprintf(w, "\n%s (%s, run %d):\n", j.Name, r.Workflow, r.ID)
+	timedOut := ""
+	if j.TimedOutAfter != "" {
+		timedOut = " timed out after " + j.TimedOutAfter
+	}
+	_, _ = fmt.Fprintf(w, "\n%s (%s, run %d):%s\n", j.Name, r.Workflow, r.ID, timedOut)
 	var steps []Step
 	if j.Steps != nil {
 		steps = *j.Steps

@@ -1,0 +1,46 @@
+slow	Set up job	﻿2026-11-24T06:15:21.4166941Z Current runner version: '2.338.2'
+slow	Set up job	2026-11-24T06:15:21.4195835Z ##[group]Runner Image Provisioner
+slow	Set up job	2026-11-24T06:15:21.4196845Z Hosted Compute Agent
+slow	Set up job	2026-11-24T06:15:21.4197487Z Version: 20261111.635
+slow	Set up job	2026-11-24T06:15:21.4198196Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+slow	Set up job	2026-11-24T06:15:21.4199069Z Build Date: 2026-11-11T01:49:01Z
+slow	Set up job	2026-11-24T06:15:21.4199864Z Worker ID: {300c45fb-c7c5-491a-a44b-062acda3bf2e}
+slow	Set up job	2026-11-24T06:15:21.4200680Z Region: northcentralus
+slow	Set up job	2026-11-24T06:15:21.4201332Z Cloud: Azure
+slow	Set up job	2026-11-24T06:15:21.4201928Z ##[endgroup]
+slow	Set up job	2026-11-24T06:15:21.4203531Z ##[group]Operating System
+slow	Set up job	2026-11-24T06:15:21.4204262Z Ubuntu
+slow	Set up job	2026-11-24T06:15:21.4205067Z 26.04.1
+slow	Set up job	2026-11-24T06:15:21.4205662Z LTS
+slow	Set up job	2026-11-24T06:15:21.4206247Z ##[endgroup]
+slow	Set up job	2026-11-24T06:15:21.4206903Z ##[group]Runner Image
+slow	Set up job	2026-11-24T06:15:21.4207624Z Image: ubuntu-26.04
+slow	Set up job	2026-11-24T06:15:21.4208232Z Version: 20261116.202.1
+slow	Set up job	2026-11-24T06:15:21.4209477Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261116.202/images/ubuntu/Ubuntu2604-Readme.md
+slow	Set up job	2026-11-24T06:15:21.4211380Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261116.202
+slow	Set up job	2026-11-24T06:15:21.4212464Z ##[endgroup]
+slow	Set up job	2026-11-24T06:15:21.4213815Z ##[group]GITHUB_TOKEN Permissions
+slow	Set up job	2026-11-24T06:15:21.4216393Z Contents: read
+slow	Set up job	2026-11-24T06:15:21.4217068Z Metadata: read
+slow	Set up job	2026-11-24T06:15:21.4217910Z Packages: read
+slow	Set up job	2026-11-24T06:15:21.4218517Z ##[endgroup]
+slow	Set up job	2026-11-24T06:15:21.4220740Z Secret source: Actions
+slow	Set up job	2026-11-24T06:15:21.4222167Z Cache mode: write
+slow	Set up job	2026-11-24T06:15:21.4223723Z Prepare workflow directory
+slow	Set up job	2026-11-24T06:15:21.4570507Z Prepare all required actions
+slow	Set up job	2026-11-24T06:15:21.4680855Z Complete job name: slow
+slow	Print before	﻿2026-11-24T06:15:21.5771910Z ##[group]Run echo "before the slow step"
+slow	Print before	2026-11-24T06:15:21.5772842Z ^[[36;1mecho "before the slow step"^[[0m
+slow	Print before	2026-11-24T06:15:21.6060838Z shell: /usr/bin/bash -e {0}
+slow	Print before	2026-11-24T06:15:21.6062040Z ##[endgroup]
+slow	Print before	2026-11-24T06:15:21.6272273Z before the slow step
+slow	Sleep past the limit	﻿2026-11-24T06:15:21.6497711Z ##[group]Run echo "starting to sleep"
+slow	Sleep past the limit	2026-11-24T06:15:21.6498463Z ^[[36;1mecho "starting to sleep"^[[0m
+slow	Sleep past the limit	2026-11-24T06:15:21.6499044Z ^[[36;1msleep 150^[[0m
+slow	Sleep past the limit	2026-11-24T06:15:21.6499547Z ^[[36;1mecho "never printed"^[[0m
+slow	Sleep past the limit	2026-11-24T06:15:21.6536902Z shell: /usr/bin/bash -e {0}
+slow	Sleep past the limit	2026-11-24T06:15:21.6537518Z ##[endgroup]
+slow	Sleep past the limit	2026-11-24T06:15:21.6599805Z starting to sleep
+slow	Sleep past the limit	2026-11-24T06:16:33.4457108Z ##[error]The operation was canceled.
+slow	Complete job	﻿2026-11-24T06:16:33.4569108Z Cleaning up orphan processes
+slow	Complete job	2026-11-24T06:16:33.4830981Z Terminate orphan process: pid (2295) (sleep)

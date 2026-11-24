@@ -263,6 +263,47 @@ func (r Runner) FailedLog(ctx context.Context, runID int64, attempt int, jobID i
 	return out, nil
 }
 
+// JobLog returns the full log of the job jobID in the run runID, as gh prints
+// it. Like FailedLog it has no JSON form, and the attempt works the same way.
+func (r Runner) JobLog(ctx context.Context, runID int64, attempt int, jobID int64) ([]byte, error) {
+	run, job := strconv.FormatInt(runID, 10), strconv.FormatInt(jobID, 10)
+	args := []string{"run", "view", run}
+	if attempt > 0 {
+		args = append(args, "--attempt", strconv.Itoa(attempt))
+	}
+	out, err := r.Exec(ctx, "gh", append(args, "--log", "--job", job)...)
+	if err != nil {
+		return nil, fmt.Errorf("gh run view %s --log --job %s: %w", run, job, markNetwork(err))
+	}
+	return out, nil
+}
+
+// AnnotationsLimit is how many annotations of a job Annotations reads.
+const AnnotationsLimit = 100
+
+// Annotations returns the messages of the first AnnotationsLimit annotations
+// of the check run of the job jobID. gh api prints the API's JSON, which --jq
+// cuts down to the messages; it is one of the calls without --json.
+func (r Runner) Annotations(ctx context.Context, jobID int64) ([]string, error) {
+	id := strconv.FormatInt(jobID, 10)
+	out, err := r.Exec(ctx, "gh", "api", "repos/{owner}/{repo}/check-runs/"+id+"/annotations?per_page="+strconv.Itoa(AnnotationsLimit),
+		"--jq", "[.[] | {message}]")
+	if err != nil {
+		return nil, fmt.Errorf("gh api annotations of job %s: %w", id, markNetwork(err))
+	}
+	var raw []struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, fmt.Errorf("decoding gh api output: %w", err)
+	}
+	msgs := make([]string, len(raw))
+	for i, a := range raw {
+		msgs[i] = a.Message
+	}
+	return msgs, nil
+}
+
 // RerunFailed asks GitHub to rerun the failed jobs of the workflow run runID,
 // once. gh run rerun prints nothing useful and has no JSON form, so this is
 // one of the calls without --json. A rerun isn't safe to repeat, so callers

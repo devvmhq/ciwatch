@@ -46,6 +46,10 @@ type counts struct {
 	events                            []string // "list" and "view", in the order gh ran them
 	clock                             *fakeClock
 
+	annotationIDs []string // the job ids of the gh api annotations calls, in order
+	jobLogIDs     []string // the job ids of the gh run view --log calls, in order
+	jobLogArgs    [][]string
+
 	artifactIDs []string   // the run ids of the gh api artifacts calls, in order
 	downloads   [][]string // the args of each gh run download call
 	opened      []string   // the roots the App opened as the checkout
@@ -124,6 +128,15 @@ type fakeOpts struct {
 	logErrCalls map[string]int    // job id to how many of its first log calls fail with a network error
 	onLog       func(id string)   // runs before gh run view --log-failed answers
 
+	annotations    map[string]string // job id to the output of gh api .../check-runs/<id>/annotations: a fixture name, or JSON if it starts with [; [] if absent
+	annotationsErr map[string]error  // job id to the error the annotations call fails with
+	annotationsNet map[string]int    // job id to how many of its first annotations calls fail with a network error
+	onAnnotations  func(id string)   // runs before the annotations call answers
+	jobLog         map[string]string // job id to a file in testdata/logs/ that gh run view --log --job prints; an empty log if absent
+	jobLogBytes    map[string][]byte // job id to the exact output of gh run view --log --job, taking precedence over jobLog
+	jobLogErr      map[string]error  // job id to the error gh run view --log --job fails with
+	onJobLog       func(id string)   // runs before gh run view --log --job answers
+
 	artifacts     map[string]string            // run id to the output of gh api .../artifacts: a fixture name, or JSON if it starts with {; none if absent
 	artifactsErr  map[string]error             // run id to the error the artifacts call fails with
 	checkout      fstest.MapFS                 // the files of the checkout the App opens
@@ -178,6 +191,7 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 	c := new(counts)
 	viewCalls := map[string]int{}
 	logCalls := map[string]int{}
+	annCalls := map[string]int{}
 	var lists [][]byte
 	for _, f := range opts.listFixtures {
 		lists = append(lists, readFixture(t, f))
@@ -207,6 +221,55 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 				return nil, gitErr
 			}
 			return []byte(sha + "\n"), nil
+		case name == "gh" && len(args) == 4 && args[0] == "api" && strings.Contains(args[1], "/check-runs/"):
+			id := strings.TrimSuffix(strings.TrimPrefix(args[1], "repos/{owner}/{repo}/check-runs/"), "/annotations?per_page=100")
+			if want := []string{"api", "repos/{owner}/{repo}/check-runs/" + id + "/annotations?per_page=100", "--jq", "[.[] | {message}]"}; !slices.Equal(args, want) {
+				t.Errorf("gh args = %q, want %q", args, want)
+			}
+			c.annotationIDs = append(c.annotationIDs, id)
+			c.events = append(c.events, "annotations")
+			if opts.onAnnotations != nil {
+				opts.onAnnotations(id)
+			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			annCalls[id]++
+			if annCalls[id] <= opts.annotationsNet[id] {
+				return nil, networkErr(t)
+			}
+			if err := opts.annotationsErr[id]; err != nil {
+				return nil, err
+			}
+			switch out, ok := opts.annotations[id]; {
+			case !ok:
+				return []byte("[]"), nil
+			case strings.HasPrefix(out, "["):
+				return []byte(out), nil
+			default:
+				return readFixture(t, out), nil
+			}
+		case name == "gh" && (len(args) == 6 || len(args) == 8) && args[0] == "run" && args[1] == "view" && args[len(args)-3] == "--log" && args[len(args)-2] == "--job":
+			id := args[len(args)-1]
+			c.jobLogIDs = append(c.jobLogIDs, id)
+			c.jobLogArgs = append(c.jobLogArgs, args)
+			c.events = append(c.events, "joblog")
+			if opts.onJobLog != nil {
+				opts.onJobLog(id)
+			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if err := opts.jobLogErr[id]; err != nil {
+				return nil, err
+			}
+			if b, ok := opts.jobLogBytes[id]; ok {
+				return b, nil
+			}
+			if f, ok := opts.jobLog[id]; ok {
+				return readLog(t, f), nil
+			}
+			return nil, nil
 		case name == "gh" && len(args) == 4 && args[0] == "api":
 			id := strings.TrimSuffix(strings.TrimPrefix(args[1], "repos/{owner}/{repo}/actions/runs/"), "/artifacts?per_page=100")
 			if want := []string{"api", "repos/{owner}/{repo}/actions/runs/" + id + "/artifacts?per_page=100", "--jq", "{total_count, artifacts: [.artifacts[] | {name}]}"}; !slices.Equal(args, want) {

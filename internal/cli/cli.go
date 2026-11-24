@@ -160,6 +160,11 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		jobsApp.Retries = a.Retries // a call got through, so the network is back: full retries again
 	}
 
+	if err := a.timeouts(ctx, withJobs, stderr); err != nil { // Ctrl-C: no partial table
+		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
+		return ExitUnchecked
+	}
+
 	if err := a.failedLogs(ctx, withJobs, opts.goTests, stderr); err != nil { // Ctrl-C: no partial table
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 		return ExitUnchecked
@@ -560,29 +565,117 @@ type jobResult struct {
 	gh.Job
 	Ran    []gh.Step // the job's steps, from the jobs JSON
 	Failed bool      // the job failed in a completed run, so its log was fetched
-	Steps  []steplog.Step
-	Tests  []testlog.Failure
-	LogErr string
+	// TimedOut is the limit, as GitHub's annotation gives it, of a cancelled job
+	// whose annotations say it exceeded its maximum execution time. Its full log
+	// is fetched.
+	TimedOut string
+	Steps    []steplog.Step
+	Tests    []testlog.Failure
+	LogErr   string
 }
 
 // jobLogName names the lines of a failed job that has no failed step.
 const jobLogName = "(job log)"
 
-// failedSpans is when each failed step of a job ran.
-func failedSpans(steps []gh.Step) []steplog.Span {
+// timeoutMessage is what GitHub's annotation says of a job that ran past its
+// timeout-minutes; the capture is the limit. GitHub never reports timed_out for
+// such a job, so this text is the only sign. A reworded message is missed,
+// never invented.
+var timeoutMessage = regexp.MustCompile(`^The job has exceeded the maximum execution time of (\S+)$`)
+
+// timeouts fetches the annotations of each cancelled job of a completed run
+// and sets TimedOut on those that say the job timed out, writing a line to
+// stderr for each. A failed call is a warning and leaves the job as it is. It
+// returns an error only when ctx is cancelled.
+func (a App) timeouts(ctx context.Context, runs []runWithJobs, stderr io.Writer) error {
+	annApp := a
+	for i, r := range runs {
+		if r.Status != "completed" {
+			continue
+		}
+		for k, j := range r.Jobs {
+			if j.Conclusion != "cancelled" {
+				continue
+			}
+			msgs, err := retry(ctx, annApp, stderr, fmt.Sprintf("gh api annotations of job %d", j.ID), func() ([]string, error) {
+				return a.GH.Annotations(ctx, j.ID)
+			})
+			if err != nil && ctx.Err() != nil {
+				return err
+			}
+			if err != nil {
+				_, _ = fmt.Fprintf(stderr, "ciwatch: can't fetch the annotations of job %d (%s) of run %d (%s): %v\n", j.ID, j.Name, r.ID, r.Workflow, err)
+				if errors.Is(err, gh.ErrNetwork) || errors.Is(err, gh.ErrTemporary) {
+					annApp.Retries = 0 // the network is likely still down
+				}
+				continue
+			}
+			annApp.Retries = a.Retries
+			for _, m := range msgs {
+				if match := timeoutMessage.FindStringSubmatch(m); match != nil {
+					runs[i].Jobs[k].TimedOut = match[1]
+					_, _ = fmt.Fprintf(stderr, "ciwatch: job %d (%s) of run %d (%s) timed out after %s\n", j.ID, j.Name, r.ID, r.Workflow, match[1])
+					break
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// failedSpans is when each step of a job that ended with conclusion ran.
+func failedSpans(steps []gh.Step, conclusion string) []steplog.Span {
 	var spans []steplog.Span
 	for _, s := range steps {
-		if s.Conclusion == "failure" {
+		if s.Conclusion == conclusion {
 			spans = append(spans, steplog.Span{Name: s.Name, Started: s.Started, Completed: s.Completed})
 		}
 	}
 	return spans
 }
 
+// stepLines keeps the lines of the step called name from a full job log, whose
+// lines read <job>\t<step>\t<timestamp> <text>. A line without those tabs
+// continues the line before it.
+func stepLines(log []byte, name string) []byte {
+	var out []byte
+	keep := false
+	for _, l := range bytes.SplitAfter(log, []byte("\n")) {
+		if parts := bytes.SplitN(l, []byte("\t"), 3); len(parts) == 3 {
+			keep = string(parts[1]) == name
+		}
+		if keep {
+			out = append(out, l...)
+		}
+	}
+	return out
+}
+
 // readLog finds the end of the failed steps in log, and with goTests the
 // failing tests.
 func readLog(j jobResult, log []byte, goTests bool) (steps []steplog.Step, tests []testlog.Failure, err error) {
-	if spans := failedSpans(j.Ran); len(spans) > 0 {
+	conclusion := "failure"
+	if j.TimedOut != "" {
+		conclusion = "cancelled"
+	}
+	if spans := failedSpans(j.Ran, conclusion); len(spans) > 0 && j.TimedOut != "" {
+		// The full log labels each line with its step, and a cancelled step's
+		// start second is shared with the steps before it, so each span is
+		// parsed from the lines of its own step only.
+		// If gh labelled no line with the step's name (UNKNOWN STEP), the whole
+		// log is parsed by the step's times alone.
+		for _, sp := range spans {
+			own := stepLines(log, sp.Name)
+			if len(own) == 0 {
+				own = log
+			}
+			var one []steplog.Step
+			if one, err = steplog.Parse(bytes.NewReader(own), []steplog.Span{sp}); err != nil {
+				break
+			}
+			steps = append(steps, one...)
+		}
+	} else if len(spans) > 0 {
 		steps, err = steplog.Parse(bytes.NewReader(log), spans)
 	} else {
 		var whole steplog.Step
@@ -610,10 +703,13 @@ func (a App) failedLogs(ctx context.Context, runs []runWithJobs, goTests bool, s
 	logApp := a
 	for i, r := range runs {
 		for k, j := range r.Jobs {
-			if !j.Failed {
+			if !j.Failed && j.TimedOut == "" {
 				continue
 			}
 			log, err := retry(ctx, logApp, stderr, fmt.Sprintf("gh run view %d --job %d", r.ID, j.ID), func() ([]byte, error) {
+				if j.TimedOut != "" { // gh run view --log-failed prints nothing for a cancelled job
+					return a.GH.JobLog(ctx, r.ID, r.Attempt, j.ID)
+				}
 				return a.GH.FailedLog(ctx, r.ID, r.Attempt, j.ID)
 			})
 			if err != nil && ctx.Err() != nil {
