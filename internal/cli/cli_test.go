@@ -125,6 +125,7 @@ type fakeOpts struct {
 	root          string                       // a real directory the fake git prints as the toplevel and the App opens with os.DirFS, instead of checkout
 	downloadFiles map[string]map[string]string // artifact name to the files (name to content) gh run download writes into its -D directory
 	onDownload    func()                       // runs when gh run download is called
+	afterDownload func()                       // runs when gh run download has written its files, before it returns success
 	tempDir       string                       // App.TempDir, the parent of the staging directories
 	toplevelErr   error                        // the error git rev-parse --show-toplevel fails with
 	rerunErr      map[string]error             // run id to the error gh run rerun fails with
@@ -239,6 +240,9 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 				if err := os.WriteFile(filepath.Join(args[6], name), []byte(content), 0o600); err != nil {
 					t.Error(err)
 				}
+			}
+			if opts.afterDownload != nil {
+				opts.afterDownload()
 			}
 			return nil, nil
 		case name == "gh" && len(args) >= 4 && args[0] == "run" && args[1] == "list" && args[2] == "--branch":

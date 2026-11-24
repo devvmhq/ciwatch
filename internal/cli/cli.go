@@ -161,6 +161,7 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	}
 
 	if err := a.crashes(ctx, withJobs, opts.fetchCrashes, stderr); err != nil { // Ctrl-C: no partial table
+		reportWritten(stderr, withJobs)
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 		return ExitUnchecked
 	}
@@ -261,7 +262,7 @@ func (a App) crashes(ctx context.Context, runs []runWithJobs, fetch bool, stderr
 			return listing{arts, total}, err
 		})
 		if err != nil && ctx.Err() != nil {
-			return err
+			return ctx.Err() // gh may fail with its own error when killed; report the cancel
 		}
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "ciwatch: can't list artifacts for run %d (%s): %v\n", r.ID, r.Workflow, err)
@@ -287,6 +288,20 @@ func (a App) crashes(ctx context.Context, runs []runWithJobs, fetch bool, stderr
 	return a.fetchCrashes(ctx, runs, stderr)
 }
 
+// reportWritten lists, in the order they were fetched, the crash inputs this
+// invocation wrote into the checkout: a crash with FetchedTo set and not
+// AlreadyPresent is in the checkout, because files are placed only after the
+// download succeeded.
+func reportWritten(stderr io.Writer, runs []runWithJobs) {
+	for _, r := range runs {
+		for _, c := range r.Crashes {
+			if c.FetchedTo != "" && !c.AlreadyPresent {
+				_, _ = fmt.Fprintf(stderr, "ciwatch: %s of run %d was fetched to %s\n", c.Artifact, r.ID, c.FetchedTo)
+			}
+		}
+	}
+}
+
 // fetchCrashes downloads the crash inputs of runs, once the checkout is known.
 func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Writer) error {
 	var root string
@@ -296,6 +311,9 @@ func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Wri
 	dlApp := a
 	for i, r := range runs {
 		for k, c := range r.Crashes {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			fail := func(msg string) {
 				_, _ = fmt.Fprintf(stderr, "ciwatch: can't fetch %s of run %d: %s\n", c.Artifact, r.ID, msg)
 				runs[i].Crashes[k].FetchErr = msg
@@ -310,12 +328,18 @@ func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Wri
 					fsys = open(root)
 				}
 			}
+			if err := ctx.Err(); err != nil { // Ctrl-C while finding the checkout: not a failed input
+				return err
+			}
 			if rootErr != nil {
 				fail(rootErr.Error())
 				runs[i].Crashes[k].failKind = failNoCheckout
 				continue
 			}
 			files, err := fuzztarget.Declaring(fsys, c.Target)
+			if ctxErr := ctx.Err(); ctxErr != nil { // Ctrl-C during the search: not a skipped input
+				return ctxErr
+			}
 			switch {
 			case err != nil:
 				fail(fmt.Sprintf("looking for %s in the checkout: %v", c.Target, err))
@@ -333,7 +357,7 @@ func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Wri
 			rel := path.Join(path.Dir(files[0]), "testdata", "fuzz", c.Target)
 			written, present, err := a.stageAndPlace(ctx, dlApp, stderr, r.ID, c.Artifact, filepath.Join(root, filepath.FromSlash(rel)))
 			if err != nil && ctx.Err() != nil {
-				return err
+				return ctx.Err() // gh may fail with its own error when killed; report the cancel
 			}
 			if err != nil {
 				fail(err.Error())

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -780,5 +781,255 @@ func TestJSONDocumentsFuzzFields(t *testing.T) {
 		if doc[path] != typ {
 			t.Errorf("docs/json.md field %q is %q, want %q with a note on when it is present", path, doc[path], typ)
 		}
+	}
+}
+
+const twoCrashes = `{"total_count":2,"artifacts":[{"name":"crash-FuzzParse"},{"name":"crash-FuzzOther"}]}`
+
+// writtenLine is what Ctrl-C lists for an input this run wrote into dir.
+func writtenLine(artifact, run, dir string) string {
+	return "ciwatch: " + artifact + " of run " + run + " was fetched to " + dir
+}
+
+// runCancelled runs ciwatch --fetch-crashes with ctx and returns the exit code
+// and output.
+func runCancelled(ctx context.Context, t *testing.T, opts fakeOpts, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	app, _ := fakeWith(t, "run-list-failure.json", nil, nil, opts)
+	var out, errOut bytes.Buffer
+	code = app.Run(ctx, append([]string{"--fetch-crashes"}, append(args, "HEAD")...), &out, &errOut)
+	return code, out.String(), errOut.String()
+}
+
+// writeFuzz declares func <target> in internal/<pkg>/<pkg>_test.go.
+func writeFuzz(t *testing.T, root, pkg, target string) {
+	t.Helper()
+	path := filepath.Join(root, "internal", pkg, pkg+"_test.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	src := "package " + pkg + "\n\nimport \"testing\"\n\nfunc " + target + "(f *testing.F) {\n}\n"
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFuzzInterruptListsWritten covers AC-1 and AC-3: Ctrl-C while the second
+// input downloads lists the first, which is in the checkout, and not the second.
+func TestFuzzInterruptListsWritten(t *testing.T) {
+	opts, root, temp := realCheckout(t, nil, map[string]string{"abc": "x"})
+	opts.artifacts = map[string]string{fuzzRun: twoCrashes}
+	opts.downloadFiles["crash-FuzzOther"] = map[string]string{"def": "y"}
+	writeOther(t, root)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	n := 0
+	opts.onDownload = func() {
+		if n++; n == 2 {
+			cancel()
+		}
+	}
+	code, stdout, stderr := runCancelled(ctx, t, opts)
+	if code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, stderr)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want it empty", stdout)
+	}
+	lines := lastLines(stderr)
+	if got := lines[len(lines)-1]; !strings.HasSuffix(got, "context canceled") {
+		t.Errorf("last stderr line = %q, want the context canceled line", got)
+	}
+	if want := writtenLine("crash-FuzzParse", fuzzRun, fuzzDir); !slices.Contains(lines, want) {
+		t.Errorf("stderr = %q, want the line %q", stderr, want)
+	}
+	if strings.Contains(stderr, "crash-FuzzOther of run "+fuzzRun+" was fetched") {
+		t.Errorf("stderr = %q, want no line for the interrupted input", stderr)
+	}
+	if got := readFile(t, filepath.Join(root, fuzzDir, "abc")); got != "x" {
+		t.Errorf("written file = %q, want the downloaded bytes", got)
+	}
+	if _, err := os.Stat(filepath.Join(root, "internal/q/testdata")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("checkout has testdata for the interrupted input (stat error %v)", err)
+	}
+	if !isEmptyDir(t, temp) {
+		t.Errorf("TempDir %q is not empty", temp)
+	}
+}
+
+// TestFuzzInterruptBeforeAnyWrite covers AC-2: with nothing written, Ctrl-C
+// lists nothing, whether it comes during the first download or before
+// fetching starts.
+func TestFuzzInterruptBeforeAnyWrite(t *testing.T) {
+	tests := []struct {
+		name   string
+		cancel func(o *fakeOpts, cancel context.CancelFunc)
+	}{
+		{"first download", func(o *fakeOpts, cancel context.CancelFunc) { o.onDownload = cancel }},
+		{"listing jobs", func(o *fakeOpts, cancel context.CancelFunc) { o.onView = func(string) { cancel() } }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, root, temp := realCheckout(t, nil, map[string]string{"abc": "x"})
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			tt.cancel(&opts, cancel)
+			code, stdout, stderr := runCancelled(ctx, t, opts)
+			if code != cli.ExitUnchecked {
+				t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, stderr)
+			}
+			if stdout != "" {
+				t.Errorf("stdout = %q, want it empty", stdout)
+			}
+			if strings.Contains(stderr, "was fetched to") {
+				t.Errorf("stderr = %q, want no was fetched to line", stderr)
+			}
+			if got := lastLines(stderr); !strings.HasSuffix(got[len(got)-1], "context canceled") {
+				t.Errorf("stderr = %q, want the context canceled line last", stderr)
+			}
+			if _, err := os.Stat(filepath.Join(root, "internal/p/testdata")); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("checkout has testdata (stat error %v)", err)
+			}
+			if !isEmptyDir(t, temp) {
+				t.Errorf("TempDir %q is not empty", temp)
+			}
+		})
+	}
+}
+
+// TestFuzzInterruptSkipsAlreadyPresent covers AC-4: an input whose files were
+// all in the checkout already isn't listed; one with a new file is.
+func TestFuzzInterruptSkipsAlreadyPresent(t *testing.T) {
+	tests := []struct {
+		name     string
+		download map[string]string
+		listed   bool
+	}{
+		{"all present", map[string]string{"abc": "different"}, false},
+		{"one new", map[string]string{"abc": "different", "def": "new"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, root, _ := realCheckout(t, map[string]string{fuzzDir + "/abc": "original"}, tt.download)
+			opts.artifacts = map[string]string{fuzzRun: twoCrashes}
+			opts.downloadFiles["crash-FuzzOther"] = map[string]string{"z": "z"}
+			writeOther(t, root)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			n := 0
+			opts.onDownload = func() {
+				if n++; n == 2 {
+					cancel()
+				}
+			}
+			code, stdout, stderr := runCancelled(ctx, t, opts)
+			if code != cli.ExitUnchecked || stdout != "" {
+				t.Errorf("exit code = %d, stdout = %q, want %d and no stdout (stderr %q)", code, stdout, cli.ExitUnchecked, stderr)
+			}
+			if got := strings.Contains(stderr, writtenLine("crash-FuzzParse", fuzzRun, fuzzDir)); got != tt.listed {
+				t.Errorf("stderr = %q, listed = %v, want %v", stderr, got, tt.listed)
+			}
+		})
+	}
+}
+
+// TestFuzzInterruptBeforeSkippedInput covers AC-5: Ctrl-C after one input is
+// written, with the next skipped before its download for want of a
+// declaration, is still an interrupt: the written input is listed, the exit
+// code is 4 and there's no table.
+func TestFuzzInterruptBeforeSkippedInput(t *testing.T) {
+	opts, _, _ := realCheckout(t, nil, map[string]string{"abc": "x"})
+	opts.artifacts = map[string]string{fuzzRun: twoCrashes} // FuzzOther is declared nowhere
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	opts.afterDownload = cancel
+	code, stdout, stderr := runCancelled(ctx, t, opts)
+	if code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, stderr)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want no table", stdout)
+	}
+	lines := lastLines(stderr)
+	if want := writtenLine("crash-FuzzParse", fuzzRun, fuzzDir); !slices.Contains(lines, want) {
+		t.Errorf("stderr = %q, want the line %q", stderr, want)
+	}
+	if got := lines[len(lines)-1]; !strings.HasSuffix(got, "context canceled") {
+		t.Errorf("last stderr line = %q, want the context canceled line", got)
+	}
+}
+
+// TestFuzzInterruptWhileChecking: Ctrl-C while the checkout is opened for the
+// only input, whose target no file declares, is still an interrupt: exit 4,
+// no table, not a skipped input.
+func TestFuzzInterruptWhileChecking(t *testing.T) {
+	opts, _, _ := realCheckout(t, nil, nil)
+	opts.artifacts = map[string]string{fuzzRun: `{"total_count":1,"artifacts":[{"name":"crash-FuzzOther"}]}`} // declared nowhere
+	app, _ := fakeWith(t, "run-list-failure.json", nil, nil, opts)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	open := app.OpenDir
+	app.OpenDir = func(root string) fs.FS {
+		cancel()
+		return open(root)
+	}
+	var out, errOut bytes.Buffer
+	code := app.Run(ctx, []string{"--fetch-crashes", "HEAD"}, &out, &errOut)
+	if code != cli.ExitUnchecked {
+		t.Errorf("exit code = %d, want %d (stderr %q)", code, cli.ExitUnchecked, errOut.String())
+	}
+	if out.String() != "" {
+		t.Errorf("stdout = %q, want no table", out.String())
+	}
+	lines := lastLines(errOut.String())
+	if got := lines[len(lines)-1]; !strings.HasSuffix(got, "context canceled") {
+		t.Errorf("last stderr line = %q, want the context canceled line", got)
+	}
+}
+
+// TestFuzzInterruptTwoRuns covers AC-6: inputs of two runs are listed one line
+// each, in the order they were fetched.
+func TestFuzzInterruptTwoRuns(t *testing.T) {
+	const second = "44709305564"
+	opts, root, _ := realCheckout(t, nil, map[string]string{"a": "1"})
+	opts.listRaw = []string{`[` +
+		`{"conclusion":"failure","createdAt":"2026-11-20T11:38:53Z","databaseId":` + fuzzRun + `,"event":"schedule","headBranch":"main","headSha":"c4b4c0242478a612ca295d5ff223709e84a2d172","status":"completed","updatedAt":"2026-11-20T12:13:08Z","url":"https://github.com/devvmhq/devvm/actions/runs/` + fuzzRun + `","workflowDatabaseId":409041459,"workflowName":"Fuzz"},` +
+		`{"conclusion":"failure","createdAt":"2026-11-20T09:16:24Z","databaseId":` + second + `,"event":"push","headBranch":"main","headSha":"c4b4c0242478a612ca295d5ff223709e84a2d172","status":"completed","updatedAt":"2026-11-20T09:29:21Z","url":"https://github.com/devvmhq/devvm/actions/runs/` + second + `","workflowDatabaseId":409041453,"workflowName":"CI"}]`}
+	opts.viewFixture = map[string]string{second: "run-view-" + fuzzRun + ".json"}
+	opts.artifacts = map[string]string{
+		fuzzRun: twoCrashes,
+		second:  `{"total_count":2,"artifacts":[{"name":"crash-FuzzThird"},{"name":"crash-FuzzFourth"}]}`,
+	}
+	writeOther(t, root)
+	writeFuzz(t, root, "r", "FuzzThird")
+	writeFuzz(t, root, "s", "FuzzFourth")
+	opts.downloadFiles["crash-FuzzOther"] = map[string]string{"b": "2"}
+	opts.downloadFiles["crash-FuzzThird"] = map[string]string{"c": "3"}
+	opts.downloadFiles["crash-FuzzFourth"] = map[string]string{"d": "4"}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	n := 0
+	opts.onDownload = func() {
+		if n++; n == 4 {
+			cancel()
+		}
+	}
+	code, stdout, stderr := runCancelled(ctx, t, opts)
+	if code != cli.ExitUnchecked || stdout != "" {
+		t.Errorf("exit code = %d, stdout = %q, want %d and no stdout (stderr %q)", code, stdout, cli.ExitUnchecked, stderr)
+	}
+	var got []string
+	for _, l := range lastLines(stderr) {
+		if strings.Contains(l, "was fetched to") {
+			got = append(got, l)
+		}
+	}
+	want := []string{
+		writtenLine("crash-FuzzParse", fuzzRun, fuzzDir),
+		writtenLine("crash-FuzzOther", fuzzRun, "internal/q/testdata/fuzz/FuzzOther"),
+		writtenLine("crash-FuzzThird", second, "internal/r/testdata/fuzz/FuzzThird"),
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("was fetched to lines = %q, want %q", got, want)
 	}
 }
