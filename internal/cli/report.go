@@ -165,9 +165,9 @@ func (rep Report) WriteTable(w io.Writer, maxLines int) error {
 			line := fmt.Sprintf("  %s (%s, run %d)", c.Target, c.Artifact, c.RunID)
 			switch {
 			case c.AlreadyPresent:
-				line += ": already present in " + c.FetchedTo
+				line += ": already present in " + quotePath(c.FetchedTo)
 			case c.FetchedTo != "":
-				line += ": fetched to " + c.FetchedTo
+				line += ": fetched to " + quotePath(c.FetchedTo)
 			case c.FetchError != "":
 				line += ": not fetched"
 			}

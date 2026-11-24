@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -298,6 +299,17 @@ func (a App) crashes(ctx context.Context, runs []runWithJobs, fetch bool, stderr
 	return a.fetchCrashes(ctx, runs, stderr)
 }
 
+// quotePath returns p as strconv.Quote writes it when that escapes anything
+// in it, so a name from the checkout can't fake extra lines on the terminal,
+// and p itself when it is made of printable characters only.
+func quotePath(p string) string {
+	q := strconv.Quote(p)
+	if q[1:len(q)-1] == p {
+		return p
+	}
+	return q
+}
+
 // reportWritten lists, in the order they were fetched, the crash inputs this
 // invocation wrote into the checkout: a crash with FetchedTo set and not
 // AlreadyPresent is in the checkout, because files are placed only after the
@@ -306,7 +318,7 @@ func reportWritten(stderr io.Writer, runs []runWithJobs) {
 	for _, r := range runs {
 		for _, c := range r.Crashes {
 			if c.FetchedTo != "" && !c.AlreadyPresent {
-				_, _ = fmt.Fprintf(stderr, "ciwatch: %s of run %d was fetched to %s\n", c.Artifact, r.ID, c.FetchedTo)
+				_, _ = fmt.Fprintf(stderr, "ciwatch: %s of run %d was fetched to %s\n", c.Artifact, r.ID, quotePath(c.FetchedTo))
 			}
 		}
 	}
@@ -354,7 +366,7 @@ func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Wri
 			for _, s := range res.Skipped {
 				if !warned[s.Path] {
 					warned[s.Path] = true
-					_, _ = fmt.Fprintf(stderr, "ciwatch: skipped %s while looking for fuzz targets: %s\n", s.Path, reason(s.Err))
+					_, _ = fmt.Fprintf(stderr, "ciwatch: skipped %s while looking for fuzz targets: %s\n", quotePath(s.Path), reason(s.Err))
 				}
 			}
 			files := res.Files
@@ -368,7 +380,11 @@ func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Wri
 				runs[i].Crashes[k].failKind = failNoDecl
 				continue
 			case len(files) > 1:
-				fail(fmt.Sprintf("%s is declared in %s", c.Target, strings.Join(files, ", ")))
+				quoted := make([]string, len(files))
+				for j, f := range files {
+					quoted[j] = quotePath(f)
+				}
+				fail(fmt.Sprintf("%s is declared in %s", c.Target, strings.Join(quoted, ", ")))
 				runs[i].Crashes[k].failKind = failManyDecl
 				continue
 			}
