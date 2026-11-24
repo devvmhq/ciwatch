@@ -14,6 +14,7 @@ import {
   isRecordedData,
   isTestPath,
   pickedTasks,
+  rebaseOntoSquashed,
   setLane,
   specParagraphs,
   squash,
@@ -348,6 +349,26 @@ describe("squash", () => {
     expect((await $`git log -1 ${"--format=%B"}`.quiet().text()).trim()).toBe(
       "feat(a): add A\n\nSpec: acceptance cases\nAC-1: a\n\nSpec: non-goals\n- b\n\nBuilt in steps:\n- test(a): fail\n- feat(a): add A\n\nCo-Authored-By: S <s@e>",
     );
+  });
+
+  test("a run that started before a squash lands only its own commits", async () => {
+    await repo();
+    await $`git update-ref refs/remotes/origin/main HEAD`.quiet();
+    await land("first", ["a.txt"]);
+    // A run starts from the unsquashed main, then main is squashed under it.
+    const base = (await $`git rev-parse HEAD`.quiet().text()).trim();
+    await $`git checkout --quiet -b run`.quiet();
+    await writeFile("r.txt", "r\n");
+    await $`git add --all && git commit --quiet -m ${"feat: run"}`.quiet();
+    await $`git checkout --quiet main`.quiet();
+    await squash("origin/main");
+    await $`git checkout --quiet run`.quiet();
+    const newBase = await rebaseOntoSquashed(base, "main");
+    expect(newBase).toBe((await $`git rev-parse main`.quiet().text()).trim());
+    expect((await $`git log ${"--format=%s"} main..run`.quiet().text()).trim()).toBe("feat: run");
+    expect((await $`git rev-list --merges main..run`.quiet().text()).trim()).toBe("");
+    // A base still on main is left alone.
+    expect(await rebaseOntoSquashed(newBase, "main")).toBe(newBase);
   });
 
   test("refuses a checkout with uncommitted changes", async () => {

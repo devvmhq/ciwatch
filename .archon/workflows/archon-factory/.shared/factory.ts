@@ -221,15 +221,35 @@ export async function checkpoint(artifacts: string, stage: string): Promise<stri
 // completes the dex task. Every commit on the branch is kept, and the main
 // branch's first-parent history passes the gate at every commit. Never pushes.
 // The task ID stays out of the commits; dex links the task to the merge instead.
+// When the main branch was squashed (bin/squash) after the run started, the
+// run's base is no longer on it, and merging would bring the pre-squash commits
+// back. Squashing keeps trees, so the commit on the main branch with the base's
+// tree stands in for the base: the run's own commits are moved onto it. Returns
+// the base to land from, unchanged when it's still on the main branch.
+export async function rebaseOntoSquashed(base: string, mainBranch: string): Promise<string> {
+  if ((await $`git merge-base --is-ancestor ${base} ${mainBranch}`.quiet().nothrow()).exitCode === 0) return base;
+  const tree = await git(["rev-parse", `${base}^{tree}`]);
+  const candidates = (await git(["rev-list", "--first-parent", mainBranch])).split("\n").filter(Boolean);
+  for (const c of candidates) {
+    if ((await git(["rev-parse", `${c}^{tree}`])) === tree) {
+      await git(["rebase", "--quiet", "--onto", c, base]);
+      return c;
+    }
+  }
+  throw new Error(
+    `the run started from ${base.slice(0, 7)}, which is no longer on ${mainBranch} (was it squashed?), and no commit there has the same files; rebase the run's commits onto ${mainBranch} by hand, then land`,
+  );
+}
+
 async function land(a: Args): Promise<void> {
   const message = join(a.artifacts, "commit-message.txt");
   if (!(await nonEmpty(message))) throw new Error(`no landing message at ${message}`);
   if (await staged()) throw new Error("the worktree has changes no checkpoint committed");
-  const head = (await $`git rev-parse HEAD`.quiet().text()).trim();
-  const base = (await readFile(join(a.artifacts, "base"), "utf8")).trim();
-  if (head === base) throw new Error("the branch has no commits to land");
   const main = await root();
   const branch = (await $`git -C ${main} branch --show-current`.quiet().text()).trim();
+  const base = await rebaseOntoSquashed((await readFile(join(a.artifacts, "base"), "utf8")).trim(), branch);
+  const head = (await $`git rev-parse HEAD`.quiet().text()).trim();
+  if (head === base) throw new Error("the branch has no commits to land");
   const merged = await $`git -C ${main} merge --no-ff --quiet --file ${message} ${head}`.quiet().nothrow();
   if (merged.exitCode !== 0) {
     await $`git -C ${main} merge --abort`.quiet().nothrow();

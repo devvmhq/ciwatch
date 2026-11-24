@@ -1,7 +1,7 @@
 # Archon's settings for ciwatch.
 #
 # workflows/archon-factory is the factory pack, devvmhq/archon-factory at
-# v0.6.2 (commit 0c6a431089c7bf12a1f39d94368646511b0d8d1d), copied with
+# v0.6.3 (commit eee5261056c9e9bdb148e029c6196083767772fa), copied with
 # `archon plugin copy`, which doesn't record its source. To upgrade it: run
 # `archon plugin update devvmhq/archon-factory@<tag>`, delete the folder,
 # copy it again, review the diff and update this line.
