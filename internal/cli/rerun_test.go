@@ -243,6 +243,9 @@ func TestRerunFailedCallFails(t *testing.T) {
 			if calls.list != 10 {
 				t.Errorf("gh run list calls = %d, want 10: a wait for the Fuzz run's new attempt only", calls.list)
 			}
+			if strings.Contains(stderr, "rerun after all") {
+				t.Errorf("stderr = %q, want no rerun-after-all line (AC-5)", stderr)
+			}
 			for _, d := range calls.clock.waits {
 				if d != testInterval {
 					t.Errorf("waits = %v, want only poll intervals: a failed rerun call isn't retried after a backoff", calls.clock.waits)
@@ -257,19 +260,194 @@ func TestRerunFailedCallFails(t *testing.T) {
 	}
 }
 
-// TestRerunFailedCallFailsOnEveryRun covers AC-4: with every call refused
-// there is no new attempt to wait for.
+// TestRerunFailedCallFailsOnEveryRun covers AC-5: with every call refused
+// there is no new attempt to wait for, but one extra list checks for one.
 func TestRerunFailedCallFailsOnEveryRun(t *testing.T) {
 	opts := fakeOpts{
 		rerunErr: map[string]error{ciRun: errors.New("gh: exit status 1: run cannot be rerun")},
 		listRaw:  lists(list(failed(ciRun, "CI", 1))),
 	}
 	_, stderr, calls := runRerun(t, opts, cli.ExitFailed, "--rerun-failed")
-	if calls.list != 7 {
-		t.Errorf("gh run list calls = %d, want 7: no list after the failed rerun call", calls.list)
+	if calls.list != 8 {
+		t.Errorf("gh run list calls = %d, want 8: one extra list after the failed rerun call", calls.list)
 	}
 	if !strings.Contains(stderr, "ciwatch: can't rerun the failed jobs of run "+ciRun+" (CI): ") {
 		t.Errorf("stderr = %q, want the warning", stderr)
+	}
+	if strings.Contains(stderr, "rerun after all") {
+		t.Errorf("stderr = %q, want no rerun-after-all line", stderr)
+	}
+}
+
+// afterAll is the line for a run whose rerun call failed but that was rerun.
+func afterAll(id, workflow string, attempt int) string {
+	return fmt.Sprintf("ciwatch: run %s (%s) was rerun after all (attempt %d)\n", id, workflow, attempt)
+}
+
+// TestRerunCallFailsRerunAfterAll covers AC-1 and AC-2: the rerun call
+// failed, a later list shows attempt 2, which is announced once and waited for.
+func TestRerunCallFailsRerunAfterAll(t *testing.T) {
+	rerr := errors.New("gh: exit status 1: connection reset by peer")
+	opts := fakeOpts{
+		rerunErr: map[string]error{ciRun: rerr},
+		listRaw: lists(list(failed(ciRun, "CI", 1)),
+			list(attemptRun(ciRun, "CI", "in_progress", "", 2)),
+			list(attemptRun(ciRun, "CI", "in_progress", "", 2)),
+			list(passed(ciRun, "CI", 2)),
+		),
+	}
+	stdout, stderr, calls := runRerun(t, opts, cli.ExitOK, "--rerun-failed")
+	warn := "ciwatch: can't rerun the failed jobs of run " + ciRun + " (CI): " + rerr.Error() + "\n"
+	line := afterAll(ciRun, "CI", 2)
+	if n := strings.Count(stderr, line); n != 1 {
+		t.Errorf("stderr = %q, want %q once, got %d", stderr, line, n)
+	}
+	w, l := strings.Index(stderr, warn), strings.Index(stderr, line)
+	if w < 0 || l < w {
+		t.Errorf("stderr = %q, want the warning, then the rerun-after-all line", stderr)
+	}
+	if got := calls.attempt[ciRun]; got != "2" {
+		t.Errorf("gh run view --attempt = %q, want 2", got)
+	}
+	if calls.list != 10 {
+		t.Errorf("gh run list calls = %d, want 10: it waits until attempt 2 completes", calls.list)
+	}
+	checkTable(t, stdout, slices.Concat([]row{runRow("CI", "completed", "success")}, jobRowsOf(t, "run-view-"+ciRun+".json")))
+}
+
+// TestRerunCallFailsRerunAfterAllFails covers AC-3: attempt 2 fails, and its
+// jobs and log are reported.
+func TestRerunCallFailsRerunAfterAllFails(t *testing.T) {
+	opts := fakeOpts{
+		rerunErr:    map[string]error{failedRun: errors.New("gh: exit status 1: connection reset by peer")},
+		viewFixture: map[string]string{failedRun: "run-view-44707997310-test-failure.json"},
+		logFixture:  map[string]string{failedJob: "gotestsum-failures.log"},
+		latestOnly:  map[string]bool{failedRun: true},
+		listRaw: lists(list(failed(failedRun, "CI", 1)),
+			list(attemptRun(failedRun, "CI", "in_progress", "", 2)),
+			list(failed(failedRun, "CI", 2)),
+		),
+	}
+	stdout, stderr, calls := runRerun(t, opts, cli.ExitFailed, "--rerun-failed", "--go-tests")
+	if n := strings.Count(stderr, afterAll(failedRun, "CI", 2)); n != 1 {
+		t.Errorf("stderr = %q, want the rerun-after-all line once, got %d", stderr, n)
+	}
+	if got := calls.attempt[failedRun]; got != "2" {
+		t.Errorf("gh run view --attempt for the jobs = %q, want 2", got)
+	}
+	if got := calls.logAttempt[failedJob]; got != "2" {
+		t.Errorf("gh run view --attempt for the log = %q, want 2", got)
+	}
+	checkRow(t, stdout, "CI", "completed", "failure")
+}
+
+// TestRerunCallFailsMixedRerunAfterAll covers AC-4: CI's call fails and
+// Fuzz's is accepted; while Fuzz's attempt 2 is awaited, CI shows attempt 2.
+func TestRerunCallFailsMixedRerunAfterAll(t *testing.T) {
+	opts := fakeOpts{
+		rerunErr: map[string]error{ciRun: errors.New("gh: exit status 1: connection reset by peer")},
+		listRaw: lists(list(failed(ciRun, "CI", 1), failed(fuzzRn, "Fuzz", 1)),
+			list(failed(ciRun, "CI", 1), attemptRun(fuzzRn, "Fuzz", "in_progress", "", 2)),
+			list(attemptRun(ciRun, "CI", "in_progress", "", 2), attemptRun(fuzzRn, "Fuzz", "in_progress", "", 2)),
+			list(attemptRun(ciRun, "CI", "in_progress", "", 2), passed(fuzzRn, "Fuzz", 2)),
+			list(passed(ciRun, "CI", 2), passed(fuzzRn, "Fuzz", 2)),
+		),
+	}
+	stdout, stderr, calls := runRerun(t, opts, cli.ExitOK, "--rerun-failed")
+	if n := strings.Count(stderr, afterAll(ciRun, "CI", 2)); n != 1 {
+		t.Errorf("stderr = %q, want the line for CI once, got %d", stderr, n)
+	}
+	if strings.Contains(stderr, "(Fuzz) was rerun after all") {
+		t.Errorf("stderr = %q, want no line for Fuzz", stderr)
+	}
+	for _, run := range []string{ciRun, fuzzRn} {
+		if got := calls.attempt[run]; got != "2" {
+			t.Errorf("gh run view --attempt for run %s = %q, want 2", run, got)
+		}
+	}
+	checkRow(t, stdout, "CI", "completed", "success")
+	checkRow(t, stdout, "Fuzz", "completed", "success")
+}
+
+// TestRerunAfterAllVanishes covers AC-6: a run detected as rerun after all
+// that stops being listed is reported at the last state seen.
+func TestRerunAfterAllVanishes(t *testing.T) {
+	opts := fakeOpts{
+		rerunErr: map[string]error{ciRun: errors.New("gh: exit status 1: connection reset by peer")},
+		listRaw: lists(list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+			list(attemptRun(ciRun, "CI", "in_progress", "", 2), passed(docsRun, "Docs", 1)),
+			list(passed(docsRun, "Docs", 1)),
+		),
+	}
+	stdout, stderr, _ := runVanish(t, opts, cli.ExitUnchecked, 30, "--rerun-failed")
+	if n := strings.Count(stderr, afterAll(ciRun, "CI", 2)); n != 1 {
+		t.Errorf("stderr = %q, want the rerun-after-all line once, got %d", stderr, n)
+	}
+	if n := strings.Count(stderr, unlistedCI); n != 1 {
+		t.Errorf("stderr = %q, want the no-longer-listed warning once, got %d", stderr, n)
+	}
+	checkRow(t, stdout, "CI", "in_progress")
+}
+
+// TestRerunCallFailsRunVanishesAtExtraList covers a failed-call run that the
+// extra list doesn't have: it is warned about and reported as it was, failed.
+func TestRerunCallFailsRunVanishesAtExtraList(t *testing.T) {
+	opts := fakeOpts{
+		rerunErr: map[string]error{ciRun: errors.New("gh: exit status 1: run cannot be rerun")},
+		listRaw: lists(list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+			list(passed(docsRun, "Docs", 1)),
+		),
+	}
+	stdout, stderr, _ := runRerun(t, opts, cli.ExitFailed, "--rerun-failed")
+	if n := strings.Count(stderr, unlistedCI); n != 1 {
+		t.Errorf("stderr = %q, want the no-longer-listed warning once, got %d", stderr, n)
+	}
+	checkRow(t, stdout, "CI", "completed", "failure")
+	checkRow(t, stdout, "Docs", "completed", "success")
+}
+
+// TestRerunCallFailsExtraListFails covers AC-7: when the extra list fails, a
+// warning names the error and the original attempt is reported, exit 1.
+func TestRerunCallFailsExtraListFails(t *testing.T) {
+	network := map[int]error{}
+	for i := 8; i <= 16; i++ { // the call and its 8 retries
+		network[i] = networkErr(t)
+	}
+	for _, tt := range []struct {
+		name string
+		errs map[int]error
+		want string
+	}{
+		{"HTTP error", map[int]error{8: errors.New("HTTP 401")}, "HTTP 401"},
+		{"network error after retries", network, "gave up after 8 retries"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := fakeOpts{
+				rerunErr: map[string]error{ciRun: errors.New("gh: exit status 1: run cannot be rerun")},
+				listErr:  tt.errs,
+				listRaw:  lists(list(failed(ciRun, "CI", 1))),
+			}
+			stdout, stderr, _ := runRerun(t, opts, cli.ExitFailed, "--rerun-failed")
+			if !strings.Contains(stderr, tt.want) {
+				t.Errorf("stderr = %q, want it to contain %q", stderr, tt.want)
+			}
+			checkRow(t, stdout, "CI", "completed", "failure")
+		})
+	}
+}
+
+// TestRerunCallFailsExtraListCtrlC covers AC-7: Ctrl-C during the extra list
+// exits 4 with context canceled.
+func TestRerunCallFailsExtraListCtrlC(t *testing.T) {
+	opts := fakeOpts{
+		rerunErr: map[string]error{ciRun: errors.New("gh: exit status 1: run cannot be rerun")},
+		listErr:  map[int]error{8: networkErr(t)},
+		listRaw:  lists(list(failed(ciRun, "CI", 1))),
+	}
+	// Six waits for the first watch, then the extra list's retry wait: Ctrl-C.
+	_, stderr, _ := runVanish(t, opts, cli.ExitUnchecked, 7, "--rerun-failed")
+	if !strings.Contains(stderr, "context canceled\n") {
+		t.Errorf("stderr = %q, want context canceled", stderr)
 	}
 }
 
@@ -418,6 +596,9 @@ func TestRerunCallFailsReportsListedAttempt(t *testing.T) {
 		listRaw:     lists(list(failed(failedRun, "CI", 1), passed(docsRun, "Docs", 1))),
 	}
 	stdout, stderr, calls := runRerun(t, opts, cli.ExitFailed, "--rerun-failed", "--go-tests")
+	if strings.Contains(stderr, "rerun after all") {
+		t.Errorf("stderr = %q, want no rerun-after-all line (AC-5)", stderr)
+	}
 	for _, run := range []string{failedRun, docsRun} {
 		if got := calls.attempt[run]; got != "1" {
 			t.Errorf("gh run view --attempt for run %s = %q, want 1", run, got)

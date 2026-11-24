@@ -46,7 +46,8 @@ that is already there is left alone and reported as already present. With
 --rerun-failed, the failed jobs of each failed run are rerun once, ciwatch
 waits for the new attempts, and the report is of those. A rerun run that stops
 being listed isn't waited for; it is reported at its last known state. The
-jobs and logs shown are those of the attempt reported.
+jobs and logs shown are those of the attempt reported. A run whose rerun call
+failed but that GitHub reran anyway is said so and waited for like the others.
 `
 
 // Clock is the time, which tests control.
@@ -111,8 +112,8 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		return ExitUnchecked
 	}
 	if opts.rerunFailed {
-		if want := a.rerun(ctx, runs, stderr); len(want) > 0 {
-			if runs, err = a.watchAttempts(ctx, sha, runs, want, stderr); err != nil {
+		if want, failedCalls := a.rerun(ctx, runs, stderr); len(want) > 0 || len(failedCalls) > 0 {
+			if runs, err = a.watchAttempts(ctx, sha, runs, want, failedCalls, stderr); err != nil {
 				_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 				return ExitUnchecked
 			}
@@ -743,9 +744,10 @@ func countFailed(runs []gh.Run) int {
 // rerun asks for the failed jobs of each failed run to be rerun, with one call
 // per run and never through retry, because a rerun isn't safe to repeat. A call
 // that fails is a warning. It returns, by run ID, the attempt each accepted
-// rerun must go past.
-func (a App) rerun(ctx context.Context, runs []gh.Run, w io.Writer) map[int64]int {
-	want := map[int64]int{}
+// rerun must go past, and the attempt of each run whose call failed.
+func (a App) rerun(ctx context.Context, runs []gh.Run, w io.Writer) (want, failedCalls map[int64]int) {
+	want = map[int64]int{}
+	failedCalls = map[int64]int{}
 	for _, r := range runs {
 		if !rerunnable(r) || ctx.Err() != nil {
 			continue
@@ -753,13 +755,14 @@ func (a App) rerun(ctx context.Context, runs []gh.Run, w io.Writer) map[int64]in
 		if err := a.GH.RerunFailed(ctx, r.ID); err != nil {
 			if ctx.Err() == nil {
 				_, _ = fmt.Fprintf(w, "ciwatch: can't rerun the failed jobs of run %d (%s): %v\n", r.ID, r.Workflow, err)
+				failedCalls[r.ID] = r.Attempt
 			}
 			continue
 		}
 		_, _ = fmt.Fprintf(w, "ciwatch: rerunning the failed jobs of run %d (%s)\n", r.ID, r.Workflow)
 		want[r.ID] = r.Attempt
 	}
-	return want
+	return want, failedCalls
 }
 
 // watchAttempts lists the runs for sha, as watch does but with no grace period,
@@ -767,27 +770,48 @@ func (a App) rerun(ctx context.Context, runs []gh.Run, w io.Writer) map[int64]in
 // one in want. prev is the runs the lines of progress are measured against. A
 // run in want that a list doesn't have is warned about once, not waited for
 // while it is missing, and returned at its last known state if it still is.
-func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, want map[int64]int, w io.Writer) ([]gh.Run, error) {
+// A run in failedCalls, whose rerun call failed at the attempt it maps to, is
+// announced once when a list shows a higher attempt, and then moved into want
+// like an accepted rerun. With want empty there is one list, to look for such
+// a run; if that list fails, the error is a warning and prev is returned,
+// unless ctx is done.
+func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, want, failedCalls map[int64]int, w io.Writer) ([]gh.Run, error) {
 	first := prev
-	last := map[int64]gh.Run{} // the last state seen of each run in want
+	checkOnly := len(want) == 0
+	last := map[int64]gh.Run{} // the last state seen of each run in want or failedCalls
 	for _, r := range prev {
-		if _, ok := want[r.ID]; ok {
+		_, w1 := want[r.ID]
+		_, w2 := failedCalls[r.ID]
+		if w1 || w2 {
 			last[r.ID] = r
 		}
 	}
-	gone := map[int64]bool{} // the runs in want the latest list doesn't have
+	gone := map[int64]bool{} // the runs in want or failedCalls the latest list doesn't have
 	for {
 		runs, err := retry(ctx, a, w, "gh run list", func() ([]gh.Run, error) {
 			return a.GH.RunList(ctx, sha)
 		})
 		if err != nil {
+			if checkOnly && len(want) == 0 && ctx.Err() == nil {
+				_, _ = fmt.Fprintf(w, "ciwatch: can't check whether the failed rerun calls took effect: %v\n", err)
+				return first, nil
+			}
 			return nil, err
 		}
 		progress(w, prev, runs)
 		prev = runs
+		for _, r := range runs {
+			if n, ok := failedCalls[r.ID]; ok && r.Attempt > n {
+				_, _ = fmt.Fprintf(w, "ciwatch: run %d (%s) was rerun after all (attempt %d)\n", r.ID, r.Workflow, r.Attempt)
+				want[r.ID] = n
+				delete(failedCalls, r.ID)
+			}
+		}
 		listed := map[int64]bool{}
 		for _, r := range runs {
-			if _, ok := want[r.ID]; ok {
+			_, inWant := want[r.ID]
+			_, inFailed := failedCalls[r.ID]
+			if inWant || inFailed {
 				last[r.ID] = r
 				listed[r.ID] = true
 				delete(gone, r.ID)
@@ -797,9 +821,16 @@ func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, want 
 		for id, n := range want {
 			if listed[id] {
 				waitFor[id] = n
-			} else if !gone[id] {
-				gone[id] = true
-				_, _ = fmt.Fprintf(w, "ciwatch: run %d (%s) is no longer listed for this commit; not waiting for it\n", id, last[id].Workflow)
+			}
+		}
+		// A run that isn't listed isn't waited for, and is put back at its
+		// last known state; a failed call's run is a known failure, not a pass.
+		for _, ids := range []map[int64]int{want, failedCalls} {
+			for id := range ids {
+				if !listed[id] && !gone[id] {
+					gone[id] = true
+					_, _ = fmt.Fprintf(w, "ciwatch: run %d (%s) is no longer listed for this commit; not waiting for it\n", id, last[id].Workflow)
+				}
 			}
 		}
 		if allCompleted(runs) && attemptsPast(runs, waitFor) {
