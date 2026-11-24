@@ -50,9 +50,10 @@ type counts struct {
 	jobLogIDs     []string // the job ids of the gh run view --log calls, in order
 	jobLogArgs    [][]string
 
-	artifactIDs []string   // the run ids of the gh api artifacts calls, in order
-	downloads   [][]string // the args of each gh run download call
-	opened      []string   // the roots the App opened as the checkout
+	artifactIDs  []string   // the run ids of the gh api artifacts calls, in order
+	attemptCalls []string   // "<run id>/<attempt>" of each gh api attempts call, in order
+	downloads    [][]string // the args of each gh run download call
+	opened       []string   // the roots the App opened as the checkout
 
 	reruns          []string // the run ids of the gh run rerun calls, in order
 	rerunAfterLists []int    // how many gh run list calls had been made at each of those
@@ -139,6 +140,10 @@ type fakeOpts struct {
 
 	artifacts     map[string]string            // run id to the output of gh api .../artifacts: a fixture name, or JSON if it starts with {; none if absent
 	artifactsErr  map[string]error             // run id to the error the artifacts call fails with
+	attempts      map[string]string            // run id to the fixture gh api .../attempts/<n> prints; an unexpected call if absent
+	attemptsErr   map[string]error             // run id to the error the attempts call fails with
+	attemptsNet   map[string]int               // run id to how many of its first attempts calls fail with a network error
+	onAttempt     func()                       // runs before the attempts call answers
 	checkout      fstest.MapFS                 // the files of the checkout the App opens
 	downloadErr   map[string]error             // artifact name to the error gh run download fails with
 	root          string                       // a real directory the fake git prints as the toplevel and the App opens with os.DirFS, instead of checkout
@@ -192,6 +197,7 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 	viewCalls := map[string]int{}
 	logCalls := map[string]int{}
 	annCalls := map[string]int{}
+	attemptCallN := map[string]int{}
 	var lists [][]byte
 	for _, f := range opts.listFixtures {
 		lists = append(lists, readFixture(t, f))
@@ -270,9 +276,34 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 				return readLog(t, f), nil
 			}
 			return nil, nil
+		case name == "gh" && len(args) == 4 && args[0] == "api" && strings.Contains(args[1], "/attempts/"):
+			id, attempt, _ := strings.Cut(strings.TrimPrefix(args[1], "repos/{owner}/{repo}/actions/runs/"), "/attempts/")
+			if want := []string{"api", "repos/{owner}/{repo}/actions/runs/" + id + "/attempts/" + attempt, "--jq", ".run_started_at"}; !slices.Equal(args, want) {
+				t.Errorf("gh args = %q, want %q", args, want)
+			}
+			c.attemptCalls = append(c.attemptCalls, id+"/"+attempt)
+			if opts.onAttempt != nil {
+				opts.onAttempt()
+			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			attemptCallN[id]++
+			if attemptCallN[id] <= opts.attemptsNet[id] {
+				return nil, networkErr(t)
+			}
+			if err := opts.attemptsErr[id]; err != nil {
+				return nil, err
+			}
+			out, ok := opts.attempts[id]
+			if !ok {
+				t.Errorf("unexpected attempts call %q", args)
+				return nil, errors.New("unexpected attempts call")
+			}
+			return readFixture(t, out), nil
 		case name == "gh" && len(args) == 4 && args[0] == "api":
 			id := strings.TrimSuffix(strings.TrimPrefix(args[1], "repos/{owner}/{repo}/actions/runs/"), "/artifacts?per_page=100")
-			if want := []string{"api", "repos/{owner}/{repo}/actions/runs/" + id + "/artifacts?per_page=100", "--jq", "{total_count, artifacts: [.artifacts[] | {name}]}"}; !slices.Equal(args, want) {
+			if want := []string{"api", "repos/{owner}/{repo}/actions/runs/" + id + "/artifacts?per_page=100", "--jq", "{total_count, artifacts: [.artifacts[] | {name, created_at}]}"}; !slices.Equal(args, want) {
 				t.Errorf("gh args = %q, want %q", args, want)
 			}
 			c.artifactIDs = append(c.artifactIDs, id)

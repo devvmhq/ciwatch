@@ -27,6 +27,7 @@ Schema 1 is not frozen yet: it freezes at ciwatch's first release, and until the
 | `runs[].fuzz_crashes[].target` | string | always, with `fuzz_crashes`: the fuzz target, from the artifact name |
 | `runs[].fuzz_crashes[].artifact` | string | always, with `fuzz_crashes`: the artifact's name, `crash-<target>` |
 | `runs[].fuzz_crashes[].run_id` | integer | always, with `fuzz_crashes`: the run the artifact belongs to |
+| `runs[].fuzz_crashes[].earlier_attempt` | boolean | only when the run is reported at attempt 2 or later and the artifact was created before that attempt started, so an earlier attempt uploaded it; it is still listed and fetched |
 | `runs[].fuzz_crashes[].fetched_to` | string | only with `--fetch-crashes`, once downloaded or already present: the directory, relative to the checkout |
 | `runs[].fuzz_crashes[].already_present` | boolean | only with `--fetch-crashes`, when every file of the artifact was already in `fetched_to` |
 | `runs[].fuzz_crashes[].fetch_error` | string | only with `--fetch-crashes`, when the download was skipped or failed |

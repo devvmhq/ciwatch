@@ -764,6 +764,7 @@ func TestJSONDocumentsFuzzFields(t *testing.T) {
 		"runs[].fuzz_crashes[].fetched_to":      "string",
 		"runs[].fuzz_crashes[].fetch_error":     "string",
 		"runs[].fuzz_crashes[].already_present": "boolean",
+		"runs[].fuzz_crashes[].earlier_attempt": "boolean",
 		"runs[].artifacts_error":                "string",
 	}
 	have := map[string]string{}

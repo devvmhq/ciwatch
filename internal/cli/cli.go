@@ -248,6 +248,8 @@ type runWithJobs struct {
 type crash struct {
 	Target, Artifact string
 	FetchedTo        string
+	CreatedAt        time.Time
+	EarlierAttempt   bool // uploaded before the reported attempt started
 	AlreadyPresent   bool // every file of the artifact was already in FetchedTo
 	FetchErr         string
 	failKind         failKind
@@ -290,7 +292,12 @@ func (a App) crashes(ctx context.Context, runs []runWithJobs, fetch bool, stderr
 		}
 		for _, art := range got.arts {
 			if m := crashName.FindStringSubmatch(art.Name); m != nil {
-				runs[i].Crashes = append(runs[i].Crashes, crash{Target: m[1], Artifact: art.Name})
+				runs[i].Crashes = append(runs[i].Crashes, crash{Target: m[1], Artifact: art.Name, CreatedAt: art.CreatedAt})
+			}
+		}
+		if r.Attempt >= 2 && len(runs[i].Crashes) > 0 {
+			if err := a.markEarlier(ctx, &listApp, stderr, r, runs[i].Crashes); err != nil {
+				return err
 			}
 		}
 	}
@@ -298,6 +305,40 @@ func (a App) crashes(ctx context.Context, runs []runWithJobs, fetch bool, stderr
 		return nil
 	}
 	return a.fetchCrashes(ctx, runs, stderr)
+}
+
+// markEarlier marks the crashes of r that were created before its reported
+// attempt started, and says so on stderr. GitHub reruns only a completed run, so
+// an artifact older than the attempt's start is from an earlier attempt. If the
+// start can't be found it warns once and marks nothing. It returns an error
+// only when ctx is cancelled.
+func (a App) markEarlier(ctx context.Context, listApp *App, stderr io.Writer, r runWithJobs, crashes []crash) error {
+	started, err := retry(ctx, *listApp, stderr, fmt.Sprintf("gh api attempt %d of run %d", r.Attempt, r.ID), func() (time.Time, error) {
+		return a.GH.AttemptStarted(ctx, r.ID, r.Attempt)
+	})
+	if err != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "ciwatch: can't tell which crash inputs of run %d (%s) came from an earlier attempt: %v\n", r.ID, r.Workflow, err)
+		if errors.Is(err, gh.ErrNetwork) || errors.Is(err, gh.ErrTemporary) {
+			listApp.Retries = 0 // as for the artifact listing: the network is likely still down
+		}
+		return nil
+	}
+	for k := range crashes {
+		c := &crashes[k]
+		if c.CreatedAt.IsZero() || !c.CreatedAt.Before(started) {
+			continue
+		}
+		c.EarlierAttempt = true
+		which := fmt.Sprintf("an attempt before attempt %d", r.Attempt)
+		if r.Attempt == 2 {
+			which = "attempt 1, not attempt 2"
+		}
+		_, _ = fmt.Fprintf(stderr, "ciwatch: %s of run %d (%s) was uploaded by %s\n", c.Artifact, r.ID, r.Workflow, which)
+	}
+	return nil
 }
 
 // quotePath returns p as strconv.Quote writes it when that escapes anything

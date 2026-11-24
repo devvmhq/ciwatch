@@ -10,9 +10,9 @@ import (
 	"github.com/devvmhq/ciwatch/internal/gh"
 )
 
-const artifactsJQ = "{total_count, artifacts: [.artifacts[] | {name}]}"
+const artifactsJQ = "{total_count, artifacts: [.artifacts[] | {name, created_at}]}"
 
-// TestArtifactsArgsAndDecoding covers AC-1.
+// TestArtifactsArgsAndDecoding covers AC-1 and AC-2 (created_at is decoded).
 func TestArtifactsArgsAndDecoding(t *testing.T) {
 	want := []string{"api", "repos/{owner}/{repo}/actions/runs/44729305066/artifacts?per_page=100", "--jq", artifactsJQ}
 	calls := 0

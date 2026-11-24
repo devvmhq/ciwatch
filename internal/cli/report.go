@@ -39,10 +39,12 @@ type Run struct {
 // FetchedTo is where --fetch-crashes put it, relative to the checkout;
 // FetchError says why it didn't.
 type FuzzCrash struct {
-	Target    string `json:"target"`
-	Artifact  string `json:"artifact"`
-	RunID     int64  `json:"run_id"`
-	FetchedTo string `json:"fetched_to,omitempty"`
+	Target   string `json:"target"`
+	Artifact string `json:"artifact"`
+	RunID    int64  `json:"run_id"`
+	// EarlierAttempt is set when the artifact was uploaded before the reported attempt started.
+	EarlierAttempt bool   `json:"earlier_attempt,omitempty"`
+	FetchedTo      string `json:"fetched_to,omitempty"`
 	// AlreadyPresent is set when every file of the artifact was already in FetchedTo.
 	AlreadyPresent bool   `json:"already_present,omitempty"`
 	FetchError     string `json:"fetch_error,omitempty"`
@@ -111,7 +113,7 @@ func buildReport(sha string, runs []runWithJobs, goTests bool) Report {
 		}
 		out.Runs[i] = Run{ID: r.ID, Attempt: r.Attempt, Workflow: r.Workflow, Status: r.Status, Conclusion: r.Conclusion, URL: r.URL, Jobs: jobs, JobsError: r.JobsErr, ArtifactsError: r.ArtifactsErr}
 		for _, c := range r.Crashes {
-			out.Runs[i].FuzzCrashes = append(out.Runs[i].FuzzCrashes, FuzzCrash{Target: c.Target, Artifact: c.Artifact, RunID: r.ID, FetchedTo: c.FetchedTo, AlreadyPresent: c.AlreadyPresent, FetchError: c.FetchErr})
+			out.Runs[i].FuzzCrashes = append(out.Runs[i].FuzzCrashes, FuzzCrash{Target: c.Target, Artifact: c.Artifact, RunID: r.ID, EarlierAttempt: c.EarlierAttempt, FetchedTo: c.FetchedTo, AlreadyPresent: c.AlreadyPresent, FetchError: c.FetchErr})
 		}
 		if r.Newer != nil {
 			out.Runs[i].NewerRun = &NewerRun{ID: r.Newer.ID, SHA: r.Newer.HeadSHA}

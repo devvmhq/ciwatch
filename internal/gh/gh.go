@@ -321,7 +321,23 @@ const ArtifactsLimit = 100
 
 // Artifact is one artifact a workflow run uploaded.
 type Artifact struct {
-	Name string
+	Name      string
+	CreatedAt time.Time // the zero time when the API gave none, or one that doesn't parse
+}
+
+// AttemptStarted is when attempt number attempt of the run runID started.
+func (r Runner) AttemptStarted(ctx context.Context, runID int64, attempt int) (time.Time, error) {
+	id := strconv.FormatInt(runID, 10)
+	out, err := r.Exec(ctx, "gh", "api", "repos/{owner}/{repo}/actions/runs/"+id+"/attempts/"+strconv.Itoa(attempt),
+		"--jq", ".run_started_at")
+	if err != nil {
+		return time.Time{}, fmt.Errorf("gh api attempt %d of run %s: %w", attempt, id, markNetwork(err))
+	}
+	started, err := time.Parse(time.RFC3339, strings.TrimSpace(string(out)))
+	if err != nil {
+		return time.Time{}, fmt.Errorf("decoding gh api output: %w", err)
+	}
+	return started, nil
 }
 
 // Artifacts lists the first ArtifactsLimit artifacts of the run runID, once,
@@ -330,21 +346,26 @@ type Artifact struct {
 func (r Runner) Artifacts(ctx context.Context, runID int64) (arts []Artifact, total int, err error) {
 	id := strconv.FormatInt(runID, 10)
 	out, err := r.Exec(ctx, "gh", "api", "repos/{owner}/{repo}/actions/runs/"+id+"/artifacts?per_page="+strconv.Itoa(ArtifactsLimit),
-		"--jq", "{total_count, artifacts: [.artifacts[] | {name}]}")
+		"--jq", "{total_count, artifacts: [.artifacts[] | {name, created_at}]}")
 	if err != nil {
 		return nil, 0, fmt.Errorf("gh api artifacts of run %s: %w", id, markNetwork(err))
 	}
 	var raw struct {
 		Total     int `json:"total_count"`
 		Artifacts []struct {
-			Name string `json:"name"`
+			Name      string  `json:"name"`
+			CreatedAt *string `json:"created_at"`
 		} `json:"artifacts"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil {
 		return nil, 0, fmt.Errorf("decoding gh api output: %w", err)
 	}
 	for _, a := range raw.Artifacts {
-		arts = append(arts, Artifact{Name: a.Name})
+		art := Artifact{Name: a.Name}
+		if a.CreatedAt != nil {
+			art.CreatedAt, _ = time.Parse(time.RFC3339, *a.CreatedAt) // the zero time if it doesn't parse
+		}
+		arts = append(arts, art)
 	}
 	return arts, raw.Total, nil
 }

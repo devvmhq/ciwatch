@@ -34,7 +34,7 @@ ciwatch watches every GitHub Actions run for a commit until it finishes, and sho
 
 - **Fail by returning:** functions return errors; `cli.Run` turns them into a message on stderr and an exit code, and only `cmd/ciwatch` exits.
 - **Exit codes:** 0 every run passed, 1 a run failed, 2 usage, 3 a run was cancelled, 4 couldn't check. They're constants in `internal/cli`.
-- **One call without `--json`:** `gh run view --log-failed` prints text and has no JSON form; `Runner.FailedLog` is the exception, and so is `gh run view --log` (`Runner.JobLog`); so are `gh api … --jq` (`Runner.Artifacts` and `Runner.Annotations`, the `--jq` names the fields), `gh run download` (`Runner.DownloadArtifact`) and `gh run rerun` (`Runner.RerunFailed`).
+- **One call without `--json`:** `gh run view --log-failed` prints text and has no JSON form; `Runner.FailedLog` is the exception, and so is `gh run view --log` (`Runner.JobLog`); so are `gh api … --jq` (`Runner.Artifacts`, `Runner.AttemptStarted` and `Runner.Annotations`, the `--jq` names the fields), `gh run download` (`Runner.DownloadArtifact`) and `gh run rerun` (`Runner.RerunFailed`).
 - **No prompts:** ciwatch never asks a question, since agents run it without a terminal. An action it could take (fetching crash inputs, rerunning failed jobs) is a flag, and the output ends with a hint line naming the flag.
 - **Streams and context are passed in:** functions write to the `io.Writer` they're given and take their caller's `ctx`; forbidigo enforces both.
 - **`gh` is a command, never a library:** every call goes through one runner type with a field tests replace, always with `--json` and the fields named. Test seams are fields, never package variables.
