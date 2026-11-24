@@ -1,9 +1,11 @@
 package fuzztarget_test
 
 import (
+	"bufio"
 	"errors"
 	"io/fs"
 	"slices"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -125,6 +127,33 @@ func (d denyFS) Open(name string) (fs.File, error) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
 	return d.FS.Open(name)
+}
+
+// TestDeclaringLongLine: a line over 1 MiB fails the search with an error
+// that names the file (AC-3); a declaration before it is still found (AC-4).
+func TestDeclaringLongLine(t *testing.T) {
+	long := strings.Repeat("x", 1<<20+1)
+	t.Run("AC-3 error names the file", func(t *testing.T) {
+		fsys := fstest.MapFS{"internal/q/q_test.go": file("package q\n" + long + "\n")}
+		_, err := fuzztarget.Declaring(fsys, "FuzzParse")
+		var pe *fs.PathError
+		if !errors.As(err, &pe) || pe.Op != "read" || pe.Path != "internal/q/q_test.go" {
+			t.Fatalf("err = %#v, want a *fs.PathError with Op read and Path internal/q/q_test.go", err)
+		}
+		if !errors.Is(err, bufio.ErrTooLong) {
+			t.Errorf("err = %v, want it to wrap bufio.ErrTooLong", err)
+		}
+	})
+	t.Run("AC-4 declaration before the long line", func(t *testing.T) {
+		fsys := fstest.MapFS{"internal/q/q_test.go": file(parseFuzz + long + "\n")}
+		got, err := fuzztarget.Declaring(fsys, "FuzzParse")
+		if err != nil {
+			t.Fatalf("Declaring: %v", err)
+		}
+		if want := []string{"internal/q/q_test.go"}; !slices.Equal(got.Files, want) {
+			t.Errorf("Files = %v, want %v", got.Files, want)
+		}
+	})
 }
 
 // TestDeclaringKeepsSkippedOnError: what was skipped before a fatal error is

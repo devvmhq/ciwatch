@@ -317,6 +317,26 @@ func TestFuzzFetchWalkErrorQuotesPath(t *testing.T) {
 	}
 }
 
+// TestFuzzFetchLongLineNamesFile covers AC-1 and AC-2 of the long-line
+// change: the search error names the file, quoted when it needs it.
+func TestFuzzFetchLongLineNamesFile(t *testing.T) {
+	long := &fstest.MapFile{Data: []byte("package q\n" + strings.Repeat("x", 1<<20+1) + "\n")}
+	tests := []struct{ name, file, shown string }{
+		{"AC-1 ordinary path", "internal/q/q_test.go", "internal/q/q_test.go"},
+		{"AC-2 newline in the path", "p\nq/q_test.go", `"p\nq/q_test.go"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := crashOf(oneCrash, fstest.MapFS{tt.file: long})
+			msg := "looking for FuzzParse in the checkout: read " + tt.shown + ": bufio.Scanner: token too long"
+			_, stderr, _ := runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+			run, _, _ := fuzzJSON(t, opts, "--fetch-crashes")
+			crashes, _ := crashesOf(t, run)
+			checkFetchError(t, stderr, crashes, msg)
+		})
+	}
+}
+
 // TestFuzzFetchPlaceErrorQuotesPath covers AC-2 and AC-4 of the error-text
 // quoting change: placing an input fails because the target folder's path
 // runs through a regular file.

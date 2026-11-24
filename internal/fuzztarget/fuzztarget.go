@@ -26,7 +26,8 @@ type Result struct {
 // declare func <target>(f *testing.F). It skips the directories go ignores:
 // testdata, vendor, and names starting with "." or "_". A folder or file
 // below the root that it isn't permitted to read is skipped and recorded in
-// Result.Skipped; any other error, and an unreadable root, is returned.
+// Result.Skipped; any other error, and an unreadable root, is returned. A line
+// over 1 MiB in a _test.go file fails the search with an error naming the file.
 func Declaring(fsys fs.FS, target string) (Result, error) {
 	decl := regexp.MustCompile(`^func ` + regexp.QuoteMeta(target) + `\(\w+ \*testing\.F\)`)
 	var res Result
@@ -74,6 +75,9 @@ func Declaring(fsys fs.FS, target string) (Result, error) {
 			}
 		}
 		if err := sc.Err(); err != nil && !skip(p, err) {
+			if errors.Is(err, bufio.ErrTooLong) {
+				return &fs.PathError{Op: "read", Path: p, Err: err}
+			}
 			return err
 		}
 		return nil
