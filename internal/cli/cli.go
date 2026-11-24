@@ -45,8 +45,9 @@ crash inputs; with --fetch-crashes, each is downloaded into
 testdata/fuzz/<Target>/ beside the test file that declares the target; a file
 that is already there is left alone and reported as already present. With
 --rerun-failed, the failed jobs of each failed run are rerun once, ciwatch
-waits for the new attempts, and the report is of those. A rerun run that stops
-being listed isn't waited for; it is reported at its last known state. The
+waits for the new attempts, and the report is of those. A run that stops
+being listed is warned about, isn't waited for, and is reported at its last
+known state. The
 jobs and logs shown are those of the attempt reported. A run whose rerun call
 failed but that GitHub reran anyway is said so and waited for like the others.
 `
@@ -107,14 +108,14 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		}
 		return ExitUnchecked
 	}
-	runs, err := a.watch(ctx, sha, opts.once, stderr)
+	runs, seen, err := a.watch(ctx, sha, opts.once, stderr)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 		return ExitUnchecked
 	}
 	if opts.rerunFailed {
 		if want, failedCalls := a.rerun(ctx, runs, stderr); len(want) > 0 || len(failedCalls) > 0 {
-			if runs, err = a.watchAttempts(ctx, sha, runs, want, failedCalls, stderr); err != nil {
+			if runs, err = a.watchAttempts(ctx, sha, runs, seen, want, failedCalls, stderr); err != nil {
 				_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 				return ExitUnchecked
 			}
@@ -189,7 +190,7 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	}
 
 	code, pending := exitCode(runs)
-	if pending > 0 && opts.once { // without --once, a pending run is one that dropped out of the list
+	if pending > 0 && opts.once { // without --once, a pending run is one that dropped out of the list, and was warned about
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %d runs still in progress; drop --once to wait for them\n", pending)
 	}
 	for _, r := range runs {
@@ -804,35 +805,42 @@ func parseArgs(args []string) (options, error) {
 // every run has completed and the grace period is over, writing a line to w
 // for each change (none with once). The grace period is described at graceEnd.
 // With once it lists a single time, and an empty list is an error either way.
-func (a App) watch(ctx context.Context, sha string, once bool, w io.Writer) ([]gh.Run, error) {
+// A run that a later list doesn't have is warned about, not waited for, and
+// returned at its last known state; the *listed remembers this for
+// watchAttempts.
+func (a App) watch(ctx context.Context, sha string, once bool, w io.Writer) ([]gh.Run, *listed, error) {
 	start := a.Clock.Now()
 	var prev []gh.Run
+	seen := newListed()
+	warn := func(r gh.Run) string { return unlistedWarning(r, "") }
 	for {
 		runs, err := retry(ctx, a, w, "gh run list", func() ([]gh.Run, error) {
 			return a.GH.RunList(ctx, sha)
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if once {
 			if len(runs) == 0 {
-				return nil, fmt.Errorf("no runs found for %s", sha)
+				return nil, nil, fmt.Errorf("no runs found for %s", sha)
 			}
-			return runs, nil
+			return runs, seen, nil
 		}
+		// A run the list no longer has is kept at its last state, and isn't waited for.
+		merged := seen.observe(runs, w, warn)
 		progress(w, prev, runs)
 		prev = runs
 		if over := !a.Clock.Now().Before(a.graceEnd(runs, start)); over {
-			if len(runs) == 0 {
-				return nil, fmt.Errorf("no runs found for %s", sha)
+			if len(merged) == 0 {
+				return nil, nil, fmt.Errorf("no runs found for %s", sha)
 			}
 			if allCompleted(runs) {
-				return runs, nil
+				return merged, seen, nil
 			}
 		}
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		case <-a.Clock.After(a.Interval):
 		}
 	}
@@ -879,26 +887,27 @@ func (a App) rerun(ctx context.Context, runs []gh.Run, w io.Writer) (want, faile
 
 // watchAttempts lists the runs for sha, as watch does but with no grace period,
 // until every run has completed and every run in want has an attempt past the
-// one in want. prev is the runs the lines of progress are measured against. A
-// run in want that a list doesn't have is warned about once, not waited for
-// while it is missing, and returned at its last known state if it still is.
+// one in want. prev is the runs the lines of progress are measured against,
+// and seen what watch has seen. A run that a list doesn't have is warned about
+// once per disappearance, with "; not waiting for it" if it is in want or
+// failedCalls, not waited for while it is missing, and returned at its last
+// known state if it still is.
 // A run in failedCalls, whose rerun call failed at the attempt it maps to, is
 // announced once when a list shows a higher attempt, and then moved into want
 // like an accepted rerun. With want empty there is one list, to look for such
 // a run; if that list fails, the error is a warning and prev is returned,
 // unless ctx is done.
-func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, want, failedCalls map[int64]int, w io.Writer) ([]gh.Run, error) {
+func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, seen *listed, want, failedCalls map[int64]int, w io.Writer) ([]gh.Run, error) {
 	first := prev
 	checkOnly := len(want) == 0
-	last := map[int64]gh.Run{} // the last state seen of each run in want or failedCalls
-	for _, r := range prev {
-		_, w1 := want[r.ID]
-		_, w2 := failedCalls[r.ID]
-		if w1 || w2 {
-			last[r.ID] = r
+	warn := func(r gh.Run) string {
+		_, inWant := want[r.ID]
+		_, inFailed := failedCalls[r.ID]
+		if inWant || inFailed {
+			return unlistedWarning(r, "; not waiting for it")
 		}
+		return unlistedWarning(r, "")
 	}
-	gone := map[int64]bool{} // the runs in want or failedCalls the latest list doesn't have
 	for {
 		runs, err := retry(ctx, a, w, "gh run list", func() ([]gh.Run, error) {
 			return a.GH.RunList(ctx, sha)
@@ -919,34 +928,17 @@ func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, want,
 				delete(failedCalls, r.ID)
 			}
 		}
-		listed := map[int64]bool{}
-		for _, r := range runs {
-			_, inWant := want[r.ID]
-			_, inFailed := failedCalls[r.ID]
-			if inWant || inFailed {
-				last[r.ID] = r
-				listed[r.ID] = true
-				delete(gone, r.ID)
-			}
-		}
-		waitFor := map[int64]int{}
-		for id, n := range want {
-			if listed[id] {
-				waitFor[id] = n
-			}
-		}
 		// A run that isn't listed isn't waited for, and is put back at its
 		// last known state; a failed call's run is a known failure, not a pass.
-		for _, ids := range []map[int64]int{want, failedCalls} {
-			for id := range ids {
-				if !listed[id] && !gone[id] {
-					gone[id] = true
-					_, _ = fmt.Fprintf(w, "ciwatch: run %d (%s) is no longer listed for this commit; not waiting for it\n", id, last[id].Workflow)
-				}
+		merged := seen.observe(runs, w, warn)
+		waitFor := map[int64]int{}
+		for _, r := range runs {
+			if n, ok := want[r.ID]; ok {
+				waitFor[r.ID] = n
 			}
 		}
 		if allCompleted(runs) && attemptsPast(runs, waitFor) {
-			return withGone(first, runs, gone, last), nil
+			return merged, nil
 		}
 		select {
 		case <-ctx.Done():
@@ -956,24 +948,61 @@ func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, want,
 	}
 }
 
-// withGone is runs with each run in gone put back at its last known state, in
-// the place it had in first, the runs of before the watch.
-func withGone(first, runs []gh.Run, gone map[int64]bool, last map[int64]gh.Run) []gh.Run {
+// listed remembers the last state seen of every run, and which runs the latest
+// list doesn't have, so a run that drops out can be reported at its last state.
+type listed struct {
+	order   []int64           // the IDs of the runs seen, in the order they were first seen
+	last    map[int64]gh.Run  // the last state seen of each run
+	after   map[int64][]int64 // the IDs after each run in the last list that had it
+	missing map[int64]bool    // the runs the latest list doesn't have
+}
+
+func newListed() *listed {
+	return &listed{last: map[int64]gh.Run{}, after: map[int64][]int64{}, missing: map[int64]bool{}}
+}
+
+// observe records runs, the latest list. It writes to w the line warn returns
+// for each run that is newly missing from it, and returns runs with each
+// missing run put back at its last known state, before the next run of its
+// last list that is still there, or at the end if there is none.
+func (l *listed) observe(runs []gh.Run, w io.Writer, warn func(gh.Run) string) []gh.Run {
+	present := map[int64]bool{}
+	for i, r := range runs {
+		present[r.ID] = true
+		if _, seen := l.last[r.ID]; !seen {
+			l.order = append(l.order, r.ID)
+		}
+		l.last[r.ID] = r
+		l.after[r.ID] = nil
+		for _, n := range runs[i+1:] {
+			l.after[r.ID] = append(l.after[r.ID], n.ID)
+		}
+		delete(l.missing, r.ID)
+	}
 	out := slices.Clone(runs)
-	for i, r := range first {
-		if !gone[r.ID] {
+	for _, id := range l.order {
+		if present[id] {
 			continue
 		}
-		at := len(out) // before the first later run of first that is still in out
-		for _, next := range first[i+1:] {
-			if k := slices.IndexFunc(out, func(o gh.Run) bool { return o.ID == next.ID }); k >= 0 {
+		if !l.missing[id] {
+			l.missing[id] = true
+			_, _ = fmt.Fprint(w, warn(l.last[id]))
+		}
+		at := len(out) // before the first later run of its last list that is still in out
+		for _, next := range l.after[id] {
+			if k := slices.IndexFunc(out, func(o gh.Run) bool { return o.ID == next }); k >= 0 {
 				at = k
 				break
 			}
 		}
-		out = slices.Insert(out, at, last[r.ID])
+		out = slices.Insert(out, at, l.last[id])
 	}
 	return out
+}
+
+// unlistedWarning is the line for a run that dropped out of the list.
+func unlistedWarning(r gh.Run, suffix string) string {
+	return fmt.Sprintf("ciwatch: run %d (%s) is no longer listed for this commit%s\n", r.ID, r.Workflow, suffix)
 }
 
 // attemptsPast is whether every run in want is in runs with a later attempt.
