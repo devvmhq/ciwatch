@@ -3,20 +3,48 @@ package fuzztarget
 
 import (
 	"bufio"
+	"errors"
 	"io/fs"
 	"regexp"
 	"slices"
 	"strings"
 )
 
+// Skipped is a folder or _test.go file the search wasn't allowed to read.
+type Skipped struct {
+	Path string // slash path relative to the checkout root
+	Err  error
+}
+
+// Result is what Declaring found.
+type Result struct {
+	Files   []string  // sorted slash paths of the declaring files
+	Skipped []Skipped // unreadable paths the search carried on past, in walk order
+}
+
 // Declaring returns the sorted slash paths of the _test.go files in fsys that
 // declare func <target>(f *testing.F). It skips the directories go ignores:
-// testdata, vendor, and names starting with "." or "_".
-func Declaring(fsys fs.FS, target string) ([]string, error) {
+// testdata, vendor, and names starting with "." or "_". A folder or file
+// below the root that it isn't permitted to read is skipped and recorded in
+// Result.Skipped; any other error, and an unreadable root, is returned.
+func Declaring(fsys fs.FS, target string) (Result, error) {
 	decl := regexp.MustCompile(`^func ` + regexp.QuoteMeta(target) + `\(\w+ \*testing\.F\)`)
-	var found []string
+	var res Result
+	skip := func(p string, err error) bool {
+		if p == "." || !errors.Is(err, fs.ErrPermission) {
+			return false
+		}
+		res.Skipped = append(res.Skipped, Skipped{Path: p, Err: err})
+		return true
+	}
 	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
+			if skip(p, err) {
+				if d != nil && d.IsDir() {
+					return fs.SkipDir
+				}
+				return nil
+			}
 			return err
 		}
 		name := d.Name()
@@ -31,6 +59,9 @@ func Declaring(fsys fs.FS, target string) ([]string, error) {
 		}
 		f, err := fsys.Open(p)
 		if err != nil {
+			if skip(p, err) {
+				return nil
+			}
 			return err
 		}
 		defer f.Close()
@@ -38,15 +69,19 @@ func Declaring(fsys fs.FS, target string) ([]string, error) {
 		sc.Buffer(nil, 1<<20)
 		for sc.Scan() {
 			if decl.MatchString(sc.Text()) {
-				found = append(found, p)
+				res.Files = append(res.Files, p)
 				return nil
 			}
 		}
-		return sc.Err()
+		if err := sc.Err(); err != nil && !skip(p, err) {
+			return err
+		}
+		return nil
 	})
 	if err != nil {
-		return nil, err
+		// Keep what was skipped before the failure, so the caller can still say so.
+		return Result{Skipped: res.Skipped}, err
 	}
-	slices.Sort(found)
-	return found, nil
+	slices.Sort(res.Files)
+	return res, nil
 }

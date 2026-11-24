@@ -308,6 +308,7 @@ func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Wri
 	var rootErr error
 	var fsys fs.FS
 	opened := false
+	warned := map[string]bool{}
 	dlApp := a
 	for i, r := range runs {
 		for k, c := range r.Crashes {
@@ -336,10 +337,17 @@ func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Wri
 				runs[i].Crashes[k].failKind = failNoCheckout
 				continue
 			}
-			files, err := fuzztarget.Declaring(fsys, c.Target)
+			res, err := fuzztarget.Declaring(fsys, c.Target)
 			if ctxErr := ctx.Err(); ctxErr != nil { // Ctrl-C during the search: not a skipped input
 				return ctxErr
 			}
+			for _, s := range res.Skipped {
+				if !warned[s.Path] {
+					warned[s.Path] = true
+					_, _ = fmt.Fprintf(stderr, "ciwatch: skipped %s while looking for fuzz targets: %s\n", s.Path, reason(s.Err))
+				}
+			}
+			files := res.Files
 			switch {
 			case err != nil:
 				fail(fmt.Sprintf("looking for %s in the checkout: %v", c.Target, err))
@@ -378,6 +386,15 @@ func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Wri
 		}
 	}
 	return nil
+}
+
+// reason is err's text without the "open path:" prefix of a *fs.PathError.
+func reason(err error) string {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return pe.Err.Error()
+	}
+	return err.Error()
 }
 
 // stageAndPlace downloads the artifact into a new, empty directory under
