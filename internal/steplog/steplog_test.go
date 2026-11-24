@@ -143,6 +143,66 @@ func TestParse(t *testing.T) {
 			}},
 		},
 		{
+			name: "AC-1 leaves out the previous step's lines before the step's ##[group] line in the start second",
+			log: ln("10:00:05.1000000", "prev a") + ln("10:00:05.2000000", "prev b") + ln("10:00:05.3000000", "##[group]Run go test") +
+				ln("10:00:05.4000000", "go test") + ln("10:00:06.0000000", "##[error]x"),
+			spans: []steplog.Span{{Name: "Run go test", Started: at("10:00:05"), Completed: at("10:00:06")}},
+			want:  []steplog.Step{{Name: "Run go test", Lines: []string{"##[group]Run go test", "go test", "##[error]x"}}},
+		},
+		{
+			name: "AC-1 an untimestamped line after the previous step's last line is left out with it",
+			log: ln("10:00:05.1000000", "prev a") + ln("10:00:05.2000000", "prev b") + "continues prev b\n" +
+				ln("10:00:05.3000000", "##[group]Run go test") + ln("10:00:05.4000000", "go test"),
+			spans: []steplog.Span{{Name: "Run go test", Started: at("10:00:05"), Completed: at("10:00:06")}},
+			want:  []steplog.Step{{Name: "Run go test", Lines: []string{"##[group]Run go test", "go test"}}},
+		},
+		{
+			name: "AC-1 the previous step's ##[error] line in the shared second does not end the window",
+			log: ln("10:00:05.1000000", "prev a") + ln("10:00:05.2000000", "##[error]prev") + ln("10:00:05.3000000", "##[group]Run go test") +
+				ln("10:00:05.4000000", "go test") + ln("10:00:06.0000000", "##[error]x") + ln("10:00:06.5000000", "after the error"),
+			spans: []steplog.Span{{Name: "Run go test", Started: at("10:00:05"), Completed: at("10:00:06")}},
+			want:  []steplog.Step{{Name: "Run go test", Lines: []string{"##[group]Run go test", "go test", "##[error]x"}}},
+		},
+		{
+			name: "AC-1 without an ##[error] of its own the step ends at its last line, not the previous step's ##[error]",
+			log: ln("10:00:05.2000000", "##[error]prev") + ln("10:00:05.3000000", "##[group]Run go test") +
+				ln("10:00:05.4000000", "go test") + ln("10:00:06.0000000", "more"),
+			spans: []steplog.Span{{Name: "Run go test", Started: at("10:00:05"), Completed: at("10:00:06")}},
+			want:  []steplog.Step{{Name: "Run go test", Lines: []string{"##[group]Run go test", "go test", "more"}}},
+		},
+		{
+			name: "AC-1 cuts at the first ##[group] line in the start second",
+			log: ln("10:00:05.1000000", "prev") + ln("10:00:05.2000000", "##[group]Run go test") +
+				ln("10:00:05.3000000", "##[group]own group") + ln("10:00:05.4000000", "inside"),
+			spans: []steplog.Span{{Name: "Run go test", Started: at("10:00:05"), Completed: at("10:00:06")}},
+			want:  []steplog.Step{{Name: "Run go test", Lines: []string{"##[group]Run go test", "##[group]own group", "inside"}}},
+		},
+		{
+			name: "AC-3 no ##[group] line in the start second keeps every line",
+			log: ln("10:00:05.1000000", "a") + ln("10:00:05.2000000", "b") + ln("10:00:06.0000000", "c") +
+				ln("10:00:06.5000000", "##[group]later group"),
+			spans: []steplog.Span{{Name: "Run go test", Started: at("10:00:05"), Completed: at("10:00:06")}},
+			want:  []steplog.Step{{Name: "Run go test", Lines: []string{"a", "b", "c", "##[group]later group"}}},
+		},
+		{
+			name:  "AC-3 a ##[group] line stamped before the start does not cut",
+			log:   ln("10:00:04.9000000", "##[group]Run go test") + ln("10:00:05.1000000", "a") + ln("10:00:05.2000000", "b"),
+			spans: []steplog.Span{{Name: "Run go test", Started: at("10:00:05"), Completed: at("10:00:06")}},
+			want:  []steplog.Step{{Name: "Run go test", Lines: []string{"a", "b"}}},
+		},
+		{
+			name:  "AC-3 the log ending in the start second keeps its lines when no ##[group] line came",
+			log:   ln("10:00:05.1000000", "a") + ln("10:00:05.2000000", "##[error]b"),
+			spans: []steplog.Span{{Name: "Run go test", Started: at("10:00:05"), Completed: at("10:00:09")}},
+			want:  []steplog.Step{{Name: "Run go test", Lines: []string{"a", "##[error]b"}}},
+		},
+		{
+			name:  "AC-3 the log ending in the start second after a ##[group] line keeps only the lines from it",
+			log:   ln("10:00:05.1000000", "prev") + ln("10:00:05.2000000", "##[group]Run go test") + ln("10:00:05.3000000", "go test"),
+			spans: []steplog.Span{{Name: "Run go test", Started: at("10:00:05"), Completed: at("10:00:09")}},
+			want:  []steplog.Step{{Name: "Run go test", Lines: []string{"##[group]Run go test", "go test"}}},
+		},
+		{
 			name:  "AC-7 an empty log has no steps",
 			log:   "",
 			spans: []steplog.Span{whole},
@@ -188,8 +248,13 @@ func TestParseRecordedDevvmLog(t *testing.T) {
 		t.Fatalf("Parse = %+v, want the one step Run mise run test", got)
 	}
 	lines := got[0].Lines
-	if len(lines) != steplog.Tail || got[0].Omitted == 0 {
-		t.Errorf("got %d lines and %d omitted, want %d lines and some omitted", len(lines), got[0].Omitted, steplog.Tail)
+	// AC-2: the 2 lint lines of the shared second are not counted; the window
+	// is the 301 lines from line 400 to line 700, less the 40 kept.
+	if len(lines) != steplog.Tail || got[0].Omitted != 261 {
+		t.Errorf("got %d lines and %d omitted, want %d lines and 261 omitted", len(lines), got[0].Omitted, steplog.Tail)
+	}
+	if text := strings.Join(lines, "\n"); strings.Contains(text, "[lint:code]") {
+		t.Errorf("lines = %q, want no lint lines", text)
 	}
 	if last := lines[len(lines)-1]; last != "##[error]Process completed with exit code 1." {
 		t.Errorf("last line = %q, want the ##[error] line", last)

@@ -79,6 +79,32 @@ func (t tail) step(name string) Step {
 	return Step{Name: name, Lines: append([]string(nil), last...), Omitted: t.n - len(last)}
 }
 
+// groupMark starts the line GitHub prints at the start of a step.
+const groupMark = "##[group]"
+
+// state is what Parse knows of one span.
+type state struct {
+	all, atError tail
+	hasError     bool
+	in           bool // the last line with a timestamp was in the window
+	settled      bool // the start second is over, or a ##[group] line ended it
+}
+
+// take adds a line of the window.
+func (s *state) take(text string, stamped bool) {
+	s.all.add(text)
+	if stamped && strings.HasPrefix(text, errorMark) {
+		s.hasError = true
+		s.atError = tail{append([]string(nil), s.all.lines...), s.all.n}
+	}
+}
+
+// dropStart forgets the lines taken so far, which came from the start second
+// and were the previous step's, and ends the start second.
+func (s *state) dropStart() {
+	*s = state{in: s.in, settled: true}
+}
+
 // each calls f with every line of r, however long.
 func each(r io.Reader, f func(string)) error {
 	br := bufio.NewReader(r)
@@ -101,12 +127,12 @@ func each(r io.Reader, f func(string)) error {
 // span's start up to a second after its completion, and ends at the last
 // ##[error] line in it when there is one. A line without a timestamp belongs
 // to the line before it. A span with no lines has no step.
+//
+// The jobs JSON has whole seconds, so the previous step's lines from the
+// span's start second would fall in the window. GitHub starts each step with a
+// ##[group] line, so a ##[group] line in the start second drops the lines
+// taken before it (the previous step's); without one, they stay.
 func Parse(r io.Reader, spans []Span) ([]Step, error) {
-	type state struct {
-		all, atError tail
-		hasError     bool
-		in           bool // the last line with a timestamp was in the window
-	}
 	st := make([]state, len(spans))
 	err := each(r, func(raw string) {
 		text, ts, stamped := line(raw)
@@ -114,15 +140,17 @@ func Parse(r io.Reader, spans []Span) ([]Step, error) {
 			s := &st[i]
 			if stamped {
 				s.in = !ts.Before(sp.Started) && ts.Before(sp.Completed.Add(time.Second))
+				if !ts.Before(sp.Started.Add(time.Second)) {
+					s.settled = true
+				}
 			}
 			if !s.in {
 				continue
 			}
-			s.all.add(text)
-			if stamped && strings.HasPrefix(text, errorMark) {
-				s.hasError = true
-				s.atError = tail{append([]string(nil), s.all.lines...), s.all.n}
+			if !s.settled && stamped && strings.HasPrefix(text, groupMark) {
+				s.dropStart()
 			}
+			s.take(text, stamped)
 		}
 	})
 	if err != nil {

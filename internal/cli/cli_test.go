@@ -1818,6 +1818,36 @@ func TestRunStepWithFewLinesOmitsNone(t *testing.T) {
 	}
 }
 
+// TestRunStepLeavesOutPreviousStepsSameSecond covers AC-2: the lint step ends
+// in the second the test step starts, and its lines are not in the test step's
+// block.
+func TestRunStepLeavesOutPreviousStepsSameSecond(t *testing.T) {
+	opts := devvmOpts("devvm-shared-second.log")
+	app, _ := fakeWith(t, devvmList, nil, nil, opts)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	_, block, ok := strings.Cut(stdout.String(), "\n\n")
+	if !ok {
+		t.Fatalf("stdout = %q, want the table, a blank line and a block", stdout.String())
+	}
+	if want := failedJobName + " (CI, run " + devvmRun + "):\n  Run mise run test:\n    ##[group]Run mise run test\n"; !strings.HasPrefix(block, want) {
+		t.Errorf("block = %q, want it to start with %q", block, want)
+	}
+	for _, s := range []string{"[lint:code]", "Finished in"} {
+		if strings.Contains(block, s) {
+			t.Errorf("block = %q, want it to leave out %q", block, s)
+		}
+	}
+
+	app, _ = fakeWith(t, devvmList, nil, nil, opts)
+	jobs, _ := jsonJobs(t, app, cli.ExitFailed)
+	if got := string(jobs[devvmJob]["steps"]); !strings.Contains(got, `"omitted":0`) {
+		t.Errorf("steps = %s, want omitted 0", got)
+	}
+}
+
 // TestRunFailedJobWithoutFailedStepShowsJobLog covers AC-8: a failed job whose
 // jobs JSON has no failed step shows the end of the whole log.
 func TestRunFailedJobWithoutFailedStepShowsJobLog(t *testing.T) {

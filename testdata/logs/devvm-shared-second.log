@@ -1,0 +1,20 @@
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.5018111Z ^[[38;5;12m[lint:code]^[[0m ^[[32mNo findings to report. Good job!^[[39m (^[[1m^[[93m19^[[39m suppressed^[[0m)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:45.5033792Z ^[[38;5;12m[lint:code]^[[0m ^[[1m$ git ls-files --cached --others --exclude-standard -z -- . ':!:.agents/skills/security-audit' ':!:testdata/script' |^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7871520Z ^[[38;5;12m[lint:code]^[[0m Finished in 58.23s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7897680Z ^[[2mFinished in 58.24s^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7959427Z ##[group]Run mise run test
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7959824Z ^[[36;1mmise run test^[[0m
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7979198Z shell: /usr/bin/bash -e {0}
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7979494Z env:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7979805Z   MISE_LOG_LEVEL: info
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7980097Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/devvm/devvm
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7980479Z   MISE_YES: 1
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7980697Z   CGO_ENABLED: 0
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7981006Z   GOBIN: /home/runner/.local/share/mise/installs/go/1.27.4/bin
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7981362Z   GOROOT: /home/runner/.local/share/mise/installs/go/1.27.4
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7981688Z   TZ: America/Los_Angeles
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:47:47.7981962Z ##[endgroup]
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9321737Z === ^[[31mFAIL^[[0m: internal/vm TestAgentImportFailsWhole (0.01s)
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9322130Z     agentimport_test.go:957: changed:
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9323954Z DONE 4183 tests, 55 skipped, 1 failure in 263.817s
+check (ubuntu-latest, America/Los_Angeles)	UNKNOWN STEP	2026-11-20T08:52:20.9584442Z ##[error]Process completed with exit code 1.
