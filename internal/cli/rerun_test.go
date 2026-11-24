@@ -379,12 +379,82 @@ func TestRerunVanishesBeforeNewAttempt(t *testing.T) {
 		t.Errorf("stderr = %q, want no rerun hint", stderr)
 	}
 	// GitHub holds attempt 2 of the missing run by now, so its jobs are asked
-	// for by attempt; the run that was listed is asked for as before.
-	if got := calls.attempt[ciRun]; got != "1" {
-		t.Errorf("gh run view --attempt for the missing run = %q, want 1", got)
+	// for by attempt, and so is the listed run's (AC-1, AC-5).
+	for _, run := range []string{ciRun, docsRun} {
+		if got := calls.attempt[run]; got != "1" {
+			t.Errorf("gh run view --attempt for run %s = %q, want 1", run, got)
+		}
 	}
-	if got, ok := calls.attempt[docsRun]; ok {
-		t.Errorf("gh run view --attempt for the listed run = %q, want none", got)
+}
+
+// TestRerunVanishedRunLogByAttempt covers AC-5: the log of a run that stopped
+// being listed after a rerun is fetched by its last known attempt.
+func TestRerunVanishedRunLogByAttempt(t *testing.T) {
+	opts := fakeOpts{
+		viewFixture: map[string]string{failedRun: "run-view-44707997310-test-failure.json"},
+		logFixture:  map[string]string{failedJob: "gotestsum-failures.log"},
+		latestOnly:  map[string]bool{failedRun: true},
+		listRaw: lists(list(failed(failedRun, "CI", 1), passed(docsRun, "Docs", 1)),
+			list(failed(failedRun, "CI", 1), passed(docsRun, "Docs", 1)),
+			list(passed(docsRun, "Docs", 1)),
+		),
+	}
+	_, stderr, calls := runVanish(t, opts, cli.ExitFailed, 30, "--rerun-failed", "--go-tests")
+	if got := calls.logAttempt[failedJob]; got != "1" {
+		t.Errorf("gh run view --attempt for the log of the missing run's job = %q, want 1 (stderr %q)", got, stderr)
+	}
+}
+
+// TestRerunCallFailsReportsListedAttempt covers AC-1 and AC-2: the rerun call
+// fails, but GitHub holds attempt 2, in progress. The report is of the listed
+// attempt 1: its jobs and the logs of its failed jobs.
+func TestRerunCallFailsReportsListedAttempt(t *testing.T) {
+	rerr := errors.New("gh: exit status 1: connection reset by peer")
+	opts := fakeOpts{
+		rerunErr:    map[string]error{failedRun: rerr},
+		viewFixture: map[string]string{failedRun: "run-view-44707997310-test-failure.json"},
+		logFixture:  map[string]string{failedJob: "gotestsum-failures.log"},
+		latestOnly:  map[string]bool{failedRun: true},
+		listRaw:     lists(list(failed(failedRun, "CI", 1), passed(docsRun, "Docs", 1))),
+	}
+	stdout, stderr, calls := runRerun(t, opts, cli.ExitFailed, "--rerun-failed", "--go-tests")
+	for _, run := range []string{failedRun, docsRun} {
+		if got := calls.attempt[run]; got != "1" {
+			t.Errorf("gh run view --attempt for run %s = %q, want 1", run, got)
+		}
+	}
+	if got := calls.logAttempt[failedJob]; got != "1" {
+		t.Errorf("gh run view --attempt for the log of job %s = %q, want 1", failedJob, got)
+	}
+	table, _, _ := strings.Cut(stdout, "\n\n")
+	checkTable(t, table+"\n", slices.Concat(
+		[]row{runRow("CI", "completed", "failure")}, jobRowsOf(t, "run-view-44707997310-test-failure.json"),
+		[]row{runRow("Docs", "completed", "success")}, jobRowsOf(t, "run-view-"+docsRun+".json"),
+	))
+	if !strings.Contains(stdout, "FAIL internal/vm TestAgentImportFailsWhole") {
+		t.Errorf("stdout = %q, want the failing test of attempt 1's log", stdout)
+	}
+	if strings.Contains(stderr, "can't fetch the log") {
+		t.Errorf("stderr = %q, want no warning that the log can't be fetched", stderr)
+	}
+}
+
+// TestJobAndLogRetriesKeepAttempt covers AC-6: every retry of the jobs call
+// and of the log call carries the same --attempt.
+func TestJobAndLogRetriesKeepAttempt(t *testing.T) {
+	opts := fakeOpts{
+		viewFixture:  map[string]string{failedRun: "run-view-44707997310-test-failure.json"},
+		logFixture:   map[string]string{failedJob: "gotestsum-failures.log"},
+		viewErrCalls: map[string]int{failedRun: 2},
+		logErrCalls:  map[string]int{failedJob: 2},
+		listRaw:      []string{list(failed(failedRun, "CI", 1))},
+	}
+	_, stderr, calls := runRerun(t, opts, cli.ExitFailed, "--go-tests")
+	if calls.view != 3 || calls.logs != 3 {
+		t.Fatalf("jobs calls = %d, log calls = %d, want 3 each (stderr %q)", calls.view, calls.logs, stderr)
+	}
+	if want := []string{"1", "1", "1"}; !slices.Equal(calls.jobsCallAttempts, want) || !slices.Equal(calls.logCallAttempts, want) {
+		t.Errorf("--attempt of the jobs calls = %q, of the log calls = %q, want %q on both", calls.jobsCallAttempts, calls.logCallAttempts, want)
 	}
 }
 

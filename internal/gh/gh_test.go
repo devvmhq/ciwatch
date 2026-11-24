@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -440,25 +441,61 @@ func TestRunsSinceMarksNetworkErrors(t *testing.T) {
 	}
 }
 
-func TestFailedLogArgs(t *testing.T) {
-	log, err := os.ReadFile(filepath.Join("..", "..", "testdata", "logs", "gotestsum-failures.log"))
+// TestFailedLogAttempt covers AC-2 and AC-3: an attempt of 1 or more is passed
+// to gh before --log-failed, and 0 keeps the call without it. The recorded
+// logs are those gh printed for attempts 1 and 2 of run 43529187615.
+func TestFailedLogAttempt(t *testing.T) {
+	tests := []struct {
+		name    string
+		run     int64
+		attempt int
+		log     string
+		job     string
+		want    []string
+	}{
+		{
+			"attempt 0 asks for none", 44707997310, 0, "gotestsum-failures.log", "136192285080",
+			[]string{"run", "view", "44707997310", "--log-failed", "--job", "136192285080"},
+		},
+		{
+			"attempt 1", 43529187615, 1, "devvm-43529187615-attempt1.log", "132242348233",
+			[]string{"run", "view", "43529187615", "--attempt", "1", "--log-failed", "--job", "132242348233"},
+		},
+		{
+			"attempt 2", 43529187615, 2, "devvm-43529187615-attempt2.log", "132254736456",
+			[]string{"run", "view", "43529187615", "--attempt", "2", "--log-failed", "--job", "132254736456"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			log, err := os.ReadFile(filepath.Join("..", "..", "testdata", "logs", tt.log))
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
+				if name != "gh" || !reflect.DeepEqual(args, tt.want) {
+					t.Errorf("exec %s %q, want gh %q", name, args, tt.want)
+				}
+				return log, nil
+			}}
+			got, err := r.FailedLog(t.Context(), tt.run, tt.attempt, jobID(t, tt.job))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != string(log) {
+				t.Errorf("log = %d bytes, want the %d bytes gh printed, unchanged", len(got), len(log))
+			}
+		})
+	}
+}
+
+func jobID(t *testing.T, s string) int64 {
+	t.Helper()
+	id, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"run", "view", "44707997310", "--log-failed", "--job", "136192285080"}
-	r := gh.Runner{Exec: func(_ context.Context, name string, args ...string) ([]byte, error) {
-		if name != "gh" || !reflect.DeepEqual(args, want) {
-			t.Errorf("exec %s %q, want gh %q", name, args, want)
-		}
-		return log, nil
-	}}
-	got, err := r.FailedLog(t.Context(), 44707997310, 136192285080)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != string(log) {
-		t.Errorf("log = %d bytes, want the %d bytes gh printed, unchanged", len(got), len(log))
-	}
+	return id
 }
 
 func TestFailedLogMarksErrors(t *testing.T) {
@@ -477,7 +514,7 @@ func TestFailedLogMarksErrors(t *testing.T) {
 			r := gh.Runner{Exec: func(context.Context, string, ...string) ([]byte, error) {
 				return nil, ghFailure(t, tt.file)
 			}}
-			_, err := r.FailedLog(t.Context(), 44707997310, 136192285080)
+			_, err := r.FailedLog(t.Context(), 44707997310, 0, 136192285080)
 			if err == nil {
 				t.Fatal("err = nil, want the gh error")
 			}

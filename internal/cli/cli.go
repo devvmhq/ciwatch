@@ -45,7 +45,8 @@ testdata/fuzz/<Target>/ beside the test file that declares the target; a file
 that is already there is left alone and reported as already present. With
 --rerun-failed, the failed jobs of each failed run are rerun once, ciwatch
 waits for the new attempts, and the report is of those. A rerun run that stops
-being listed isn't waited for; it is reported at its last known state.
+being listed isn't waited for; it is reported at its last known state. The
+jobs and logs shown are those of the attempt reported.
 `
 
 // Clock is the time, which tests control.
@@ -109,10 +110,9 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 		return ExitUnchecked
 	}
-	var gone map[int64]bool // the rerun runs the last list didn't have
 	if opts.rerunFailed {
 		if want := a.rerun(ctx, runs, stderr); len(want) > 0 {
-			if runs, gone, err = a.watchAttempts(ctx, sha, runs, want, stderr); err != nil {
+			if runs, err = a.watchAttempts(ctx, sha, runs, want, stderr); err != nil {
 				_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
 				return ExitUnchecked
 			}
@@ -135,10 +135,8 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			withJobs[i].Newer = &n
 		}
 		jobs, err := retry(ctx, jobsApp, stderr, fmt.Sprintf("gh run view %d", r.ID), func() ([]gh.JobSteps, error) {
-			if gone[r.ID] { // GitHub holds later attempts than the one reported
-				return a.GH.RunJobsAttempt(ctx, r.ID, r.Attempt)
-			}
-			return a.GH.RunJobsWithSteps(ctx, r.ID)
+			// GitHub may hold later attempts than the one reported.
+			return a.GH.RunJobsAttempt(ctx, r.ID, r.Attempt)
 		})
 		if err != nil && ctx.Err() != nil { // Ctrl-C: no partial table, and no warning per remaining run
 			_, _ = fmt.Fprintf(stderr, "ciwatch: %v\n", err)
@@ -615,7 +613,7 @@ func (a App) failedLogs(ctx context.Context, runs []runWithJobs, goTests bool, s
 				continue
 			}
 			log, err := retry(ctx, logApp, stderr, fmt.Sprintf("gh run view %d --job %d", r.ID, j.ID), func() ([]byte, error) {
-				return a.GH.FailedLog(ctx, r.ID, j.ID)
+				return a.GH.FailedLog(ctx, r.ID, r.Attempt, j.ID)
 			})
 			if err != nil && ctx.Err() != nil {
 				return err
@@ -768,9 +766,8 @@ func (a App) rerun(ctx context.Context, runs []gh.Run, w io.Writer) map[int64]in
 // until every run has completed and every run in want has an attempt past the
 // one in want. prev is the runs the lines of progress are measured against. A
 // run in want that a list doesn't have is warned about once, not waited for
-// while it is missing, and returned at its last known state if it still is; the
-// IDs of those runs are returned too, so their jobs are fetched by attempt.
-func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, want map[int64]int, w io.Writer) ([]gh.Run, map[int64]bool, error) {
+// while it is missing, and returned at its last known state if it still is.
+func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, want map[int64]int, w io.Writer) ([]gh.Run, error) {
 	first := prev
 	last := map[int64]gh.Run{} // the last state seen of each run in want
 	for _, r := range prev {
@@ -784,7 +781,7 @@ func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, want 
 			return a.GH.RunList(ctx, sha)
 		})
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		progress(w, prev, runs)
 		prev = runs
@@ -806,11 +803,11 @@ func (a App) watchAttempts(ctx context.Context, sha string, prev []gh.Run, want 
 			}
 		}
 		if allCompleted(runs) && attemptsPast(runs, waitFor) {
-			return withGone(first, runs, gone, last), gone, nil
+			return withGone(first, runs, gone, last), nil
 		}
 		select {
 		case <-ctx.Done():
-			return nil, nil, ctx.Err()
+			return nil, ctx.Err()
 		case <-a.Clock.After(a.Interval):
 		}
 	}

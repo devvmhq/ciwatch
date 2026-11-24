@@ -185,7 +185,7 @@ type JobSteps struct {
 }
 
 // RunJobs lists the jobs of the latest attempt of the workflow run runID.
-// Only tests call it; ciwatch itself uses RunJobsWithSteps.
+// Only tests call it; ciwatch itself uses RunJobsAttempt.
 func (r Runner) RunJobs(ctx context.Context, runID int64) ([]Job, error) {
 	withSteps, err := r.RunJobsWithSteps(ctx, runID)
 	if err != nil {
@@ -247,10 +247,16 @@ func (r Runner) RunJobsAttempt(ctx context.Context, runID int64, attempt int) ([
 // FailedLog returns the log of the failed steps of the job jobID in the run
 // runID, as gh prints it. This is the one gh call without --json: gh run view
 // --log-failed prints text and has no JSON form. gh serves it only once the run
-// has completed.
-func (r Runner) FailedLog(ctx context.Context, runID, jobID int64) ([]byte, error) {
+// has completed. The attempt picks which log gh serves: 1 or more passes
+// --attempt, 0 leaves gh to serve the latest attempt, which it refuses while
+// that attempt is still running.
+func (r Runner) FailedLog(ctx context.Context, runID int64, attempt int, jobID int64) ([]byte, error) {
 	run, job := strconv.FormatInt(runID, 10), strconv.FormatInt(jobID, 10)
-	out, err := r.Exec(ctx, "gh", "run", "view", run, "--log-failed", "--job", job)
+	args := []string{"run", "view", run}
+	if attempt > 0 {
+		args = append(args, "--attempt", strconv.Itoa(attempt))
+	}
+	out, err := r.Exec(ctx, "gh", append(args, "--log-failed", "--job", job)...)
 	if err != nil {
 		return nil, fmt.Errorf("gh run view %s --job %s: %w", run, job, markNetwork(err))
 	}

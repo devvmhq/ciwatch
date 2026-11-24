@@ -38,8 +38,13 @@ type counts struct {
 	branch  int               // gh run list --branch calls
 	logs    int               // gh run view --log-failed calls
 	logIDs  []string          // the job ids of those calls, in order
-	events  []string          // "list" and "view", in the order gh ran them
-	clock   *fakeClock
+	// logAttempt is the --attempt a --log-failed call was given, by job id.
+	logAttempt map[string]string
+	// jobsCallAttempts and logCallAttempts are the --attempt of every jobs call
+	// and every log call, in order, "" for a call without one.
+	jobsCallAttempts, logCallAttempts []string
+	events                            []string // "list" and "view", in the order gh ran them
+	clock                             *fakeClock
 
 	artifactIDs []string   // the run ids of the gh api artifacts calls, in order
 	downloads   [][]string // the args of each gh run download call
@@ -130,6 +135,7 @@ type fakeOpts struct {
 	tempDir       string                       // App.TempDir, the parent of the staging directories
 	toplevelErr   error                        // the error git rev-parse --show-toplevel fails with
 	rerunErr      map[string]error             // run id to the error gh run rerun fails with
+	latestOnly    map[string]bool              // run id to true when a later attempt is in progress: a call without --attempt gets that attempt's jobs, or gh's still-in-progress error for the log
 
 	listFixtures []string      // gh run list prints these fixtures, one per call, the last repeated
 	listRaw      []string      // like listFixtures, but the output itself
@@ -268,8 +274,24 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 				return lists[min(c.list, len(lists))-1], nil
 			}
 			return readFixture(t, fixture), nil
-		case name == "gh" && len(args) == 6 && args[0] == "run" && args[1] == "view" && args[3] == "--log-failed" && args[4] == "--job":
-			id := args[5]
+		case name == "gh" && (len(args) == 6 || len(args) == 8) && args[0] == "run" && args[1] == "view" && args[len(args)-3] == "--log-failed" && args[len(args)-2] == "--job":
+			id := args[len(args)-1]
+			if len(args) == 6 {
+				c.logCallAttempts = append(c.logCallAttempts, "")
+			} else {
+				c.logCallAttempts = append(c.logCallAttempts, args[4])
+			}
+			if len(args) == 8 {
+				if args[3] != "--attempt" {
+					t.Errorf("gh args = %q, want run view <id> [--attempt N] --log-failed --job <job>", args)
+				}
+				if c.logAttempt == nil {
+					c.logAttempt = map[string]string{}
+				}
+				c.logAttempt[id] = args[4]
+			} else if opts.latestOnly[args[2]] {
+				return nil, errors.New("gh: exit status 1: run " + args[2] + " is still in progress; logs will be available when it is complete")
+			}
 			c.logs++
 			c.logIDs = append(c.logIDs, id)
 			c.events = append(c.events, "log")
@@ -296,6 +318,11 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 			c.events = append(c.events, "view")
 			c.viewIDs = append(c.viewIDs, id)
 			want := []string{"run", "view", id, "--json", "jobs"}
+			if len(args) == 5 {
+				c.jobsCallAttempts = append(c.jobsCallAttempts, "")
+			} else {
+				c.jobsCallAttempts = append(c.jobsCallAttempts, args[4])
+			}
 			if len(args) == 7 {
 				if c.attempt == nil {
 					c.attempt = map[string]string{}
@@ -319,6 +346,9 @@ func fakeWith(t *testing.T, fixture string, ghErr, gitErr error, opts fakeOpts) 
 			file := "run-view-" + id + ".json"
 			if f, ok := opts.viewFixture[id]; ok {
 				file = f
+			}
+			if len(args) == 5 && opts.latestOnly[id] {
+				file = "run-view-" + id + "-attempt2-in-progress.json"
 			}
 			return readFixture(t, file), nil
 		}
@@ -2104,5 +2134,46 @@ func TestRunTimedOutJobGetsFailingTests(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "FAIL internal/vm TestAgentImportFailsWhole") {
 		t.Errorf("stdout = %q, want the timed-out job's failing test", stdout.String())
+	}
+}
+
+// TestSingleAttemptCallsUnchanged covers AC-4: a failed run at attempt 1,
+// without --rerun-failed, has --attempt 1 on its jobs and log calls, and the
+// output and exit code of the same run without an attempt.
+func TestSingleAttemptCallsUnchanged(t *testing.T) {
+	run := func(t *testing.T, fixtureList string) (string, *counts) {
+		t.Helper()
+		opts := failingTestsOpts("gotestsum-failures.log")
+		opts.listRaw = []string{fixtureList}
+		app, calls := fakeWith(t, "", nil, nil, opts)
+		var stdout, stderr bytes.Buffer
+		if code := app.Run(t.Context(), []string{"--go-tests", "HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+			t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+		}
+		return stdout.String(), calls
+	}
+	withAttempt, calls := run(t, list(failed(failedRun, "CI", 1)))
+	if got := calls.attempt[failedRun]; got != "1" {
+		t.Errorf("gh run view --attempt for the jobs = %q, want 1", got)
+	}
+	if got := calls.logAttempt[failedJob]; got != "1" {
+		t.Errorf("gh run view --attempt for the log = %q, want 1", got)
+	}
+	without, _ := run(t, list(failed(failedRun, "CI", 0)))
+	if withAttempt != without {
+		t.Errorf("stdout with attempt 1 = %q, without an attempt = %q, want the same", withAttempt, without)
+	}
+}
+
+// TestUnreportedAttemptAsksForNone covers AC-3: a run whose attempt gh didn't
+// report has its jobs and logs fetched with no --attempt.
+func TestUnreportedAttemptAsksForNone(t *testing.T) {
+	app, calls := fakeWith(t, "run-list-test-failure.json", nil, nil, failingTestsOpts("gotestsum-failures.log"))
+	var stdout, stderr bytes.Buffer
+	if code := app.Run(t.Context(), []string{"--go-tests", "HEAD"}, &stdout, &stderr); code != cli.ExitFailed {
+		t.Fatalf("exit code = %d, want %d (stderr %q)", code, cli.ExitFailed, stderr.String())
+	}
+	if want := []string{""}; !slices.Equal(calls.jobsCallAttempts, want) || !slices.Equal(calls.logCallAttempts, want) {
+		t.Errorf("--attempt of the jobs calls = %q, of the log calls = %q, want none", calls.jobsCallAttempts, calls.logCallAttempts)
 	}
 }

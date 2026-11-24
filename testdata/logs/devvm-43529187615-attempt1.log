@@ -1,0 +1,382 @@
+check (macos-latest, UTC)	Run mise run test	﻿2026-11-13T23:45:47.9483250Z ##[group]Run mise run test
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:47.9483590Z ^[[36;1mmise run test^[[0m
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:48.0164610Z shell: /bin/bash -e {0}
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:48.0165070Z env:
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:48.0165320Z   MISE_LOG_LEVEL: info
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:48.0165770Z   MISE_TRUSTED_CONFIG_PATHS: /Users/runner/work/devvm/devvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:48.0166280Z   MISE_YES: 1
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:48.0166720Z   CGO_ENABLED: 0
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:48.0168330Z   GOBIN: /Users/runner/.local/share/mise/installs/go/1.27.4/bin
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:48.0169580Z   GOROOT: /Users/runner/.local/share/mise/installs/go/1.27.4
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:48.0170450Z   TZ: UTC
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:48.0171140Z ##[endgroup]
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:45:48.3150180Z ^[[34m[test]^[[0m ^[[1m$ scripts/test.sh^[[0m
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:06.6552280Z ^[[32m✓^[[0m  assets (2.423s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:38.1654320Z ^[[33m∅^[[0m  cmd/devvm (2.394s) (coverage: 0.0% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:39.2857970Z ^[[32m✓^[[0m  internal/agents (1.13s) (coverage: 92.3% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:39.5882520Z ^[[32m✓^[[0m  internal/agentlogin (2.693s) (coverage: 94.9% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:40.7572820Z ^[[32m✓^[[0m  internal/backend (1.466s) (coverage: 93.5% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:40.7690580Z ^[[32m✓^[[0m  internal/backend/backendtest (1.161s) (coverage: 73.9% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:41.9415970Z ^[[32m✓^[[0m  internal/backend/registry (1.175s) (coverage: 100.0% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:48.8313990Z ^[[32m✓^[[0m  internal/build (7.906s) (coverage: 84.4% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:53.5192690Z ^[[32m✓^[[0m  internal/cli/docgen (3.555s) (coverage: 86.5% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:57.7005670Z ^[[32m✓^[[0m  internal/backend/lima (16.932s) (coverage: 88.2% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:58.3739060Z ^[[32m✓^[[0m  internal/daemon (4.844s) (coverage: 97.9% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:58.9521620Z ^[[32m✓^[[0m  internal/desktop (1.256s) (coverage: 76.8% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:46:59.5701360Z ^[[32m✓^[[0m  internal/devcontainer (1.196s) (coverage: 96.8% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:00.1325250Z ^[[32m✓^[[0m  internal/fetch (1.175s) (coverage: 96.2% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:01.7012040Z ^[[32m✓^[[0m  internal/from (1.246s) (coverage: 87.0% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:08.3045460Z ^[[32m✓^[[0m  internal/hostgit (5.365s) (coverage: 100.0% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:09.8066220Z ^[[32m✓^[[0m  internal/hostsafety (1.44s) (coverage: 95.9% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:12.4609120Z ^[[32m✓^[[0m  internal/image (1.443s) (coverage: 99.1% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:13.9126960Z ^[[32m✓^[[0m  internal/jsonc (1.066s) (coverage: 97.1% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:22.8505560Z ^[[32m✓^[[0m  internal/msg (5.867s) (coverage: 23.9% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:25.6558710Z ^[[32m✓^[[0m  internal/msg/gen (1.652s) (coverage: 93.3% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:28.8198570Z ^[[32m✓^[[0m  internal/gitprotect (26.077s) (coverage: 94.7% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:30.8786480Z ^[[32m✓^[[0m  internal/paths (1.089s) (coverage: 81.5% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:32.6727800Z ^[[32m✓^[[0m  internal/netpolicy (4.634s) (coverage: 88.6% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:35.3008410Z ^[[32m✓^[[0m  internal/ports (1.706s) (coverage: 85.2% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:36.9705830Z ^[[32m✓^[[0m  internal/project (1.142s) (coverage: 98.5% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:44.4405760Z ^[[32m✓^[[0m  internal/platform (11.561s) (coverage: 86.9% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:45.3336210Z ^[[32m✓^[[0m  internal/proxy (4.303s) (coverage: 92.8% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:45.8123840Z ^[[32m✓^[[0m  internal/redact (1.047s) (coverage: 97.7% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:48.7953070Z ^[[32m✓^[[0m  internal/safefile (2.951s) (coverage: 97.7% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:49.9884710Z ^[[32m✓^[[0m  internal/secrets (2.079s) (coverage: 91.2% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:51.4444230Z ^[[32m✓^[[0m  internal/settings (1.49s) (coverage: 95.6% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:55.5072010Z ^[[32m✓^[[0m  internal/shell (5.107s) (coverage: 100.0% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:55.6219790Z ^[[32m✓^[[0m  internal/sshagent (1.577s) (coverage: 83.8% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:47:58.9058370Z ^[[32m✓^[[0m  internal/sshconfig (1.613s) (coverage: 94.5% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:00.9730150Z ^[[32m✓^[[0m  internal/state (2.703s) (coverage: 93.7% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:09.1485190Z ^[[32m✓^[[0m  internal/stubtest (3.86s) (coverage: 83.4% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:10.4893970Z ^[[32m✓^[[0m  internal/stubtest/stub (1.342s) (coverage: 92.1% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:11.7304130Z ^[[32m✓^[[0m  internal/stubtest/stubstate (1.234s) (coverage: 91.2% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:12.1035280Z ^[[33m∅^[[0m  internal/testbuild (370ms) (coverage: 0.0% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:25.7995230Z ^[[32m✓^[[0m  internal/structure (20.778s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:29.1198530Z ^[[32m✓^[[0m  internal/tools (7.341s) (coverage: 89.7% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:36.6133610Z ^[[32m✓^[[0m  internal/trust (9.539s) (coverage: 95.0% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:38.1852830Z ^[[32m✓^[[0m  internal/ubuntu (7.29s) (coverage: 97.3% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:44.4431620Z ^[[32m✓^[[0m  internal/upgrade (3.745s) (coverage: 92.7% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:44.9922240Z ^[[33m∅^[[0m  internal/upgrade/upgradetest (556ms) (coverage: 0.0% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:48:55.3426970Z ^[[32m✓^[[0m  internal/ui (16.209s) (coverage: 89.9% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:49:05.6127060Z ^[[32m✓^[[0m  internal/vmname (1.147s) (coverage: 100.0% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:49:14.2237960Z ^[[31m✖^[[0m  internal/vmssh (8.611s) (coverage: 89.9% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:49:14.2262770Z ^[[33m∅^[[0m  locales
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:49:15.4435180Z ^[[32m✓^[[0m  packaging (1.218s) (coverage: 71.4% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:41.0013850Z ^[[31m✖^[[0m  internal/vm (6m36.345s) (coverage: 76.4% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.0889390Z ^[[32m✓^[[0m  internal/cli (9m10.382s) (coverage: 51.2% of statements)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6369880Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6370770Z === ^[[33mSkipped^[[0m
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6371640Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/build-image (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6372330Z     conformance.go:90: this backend's VMs don't start here: the check needs a running VM
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6372810Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6373360Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/start (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6374210Z     conformance.go:90: this backend's VMs don't start here: the check needs a running VM
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6432740Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6433610Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/confined (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6434340Z     conformance.go:90: this backend's VMs don't start here: the check needs a running VM
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6434740Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6435020Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/restart (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6435670Z     conformance.go:90: this backend's VMs don't start here: the check needs a running VM
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6436040Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6436380Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/reach (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6436970Z     conformance.go:90: this backend's VMs don't start here: the check needs a running VM
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6437300Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6437670Z === ^[[33mSKIP^[[0m: internal/backend/backendtest TestConformanceWithoutBooting/running-refused (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6438330Z     conformance.go:90: this backend's VMs don't start here: the check needs a running VM
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6438620Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6438910Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/caps (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6439530Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6439860Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6440210Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/problems (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6440690Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6441020Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6441320Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/host (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6672240Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6673020Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6673900Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/images (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6675200Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6676010Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6676610Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/delete-image (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6677630Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6678210Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6678810Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/origin (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6679470Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6679820Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6680110Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/build-image (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6680750Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6681090Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6681420Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/create (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6681960Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6682340Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6682690Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/create-refused (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6683380Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6683780Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6684030Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/inspect-missing (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6684700Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6685070Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6685380Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/stopped (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6685940Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6686300Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6686620Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/start-shrink (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6687260Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6687560Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6687870Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/proxy-url (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6688950Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6689310Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6689630Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/rename (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6690180Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6690530Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6690800Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/delete (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6716600Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6717060Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6717500Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/start (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6718130Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6718450Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6718660Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/confined (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6719250Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6719620Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6719960Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/restart (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6720410Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6720710Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6720940Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/reach (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6722030Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6722320Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6722640Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/running-refused (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6723690Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6723990Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6724260Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/usage (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6724700Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6725030Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6725450Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/strays (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6725890Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6726190Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6726430Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/caches (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6726920Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6727230Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6727420Z === ^[[33mSKIP^[[0m: internal/backend/lima TestConformance/lima/guard (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6728590Z     conformance_test.go:62: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6728900Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6729170Z === ^[[33mSKIP^[[0m: internal/backend/lima TestLimactlStubContract (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6729630Z     contract_test.go:139: limactl isn't on PATH: this test runs real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6729930Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6730150Z === ^[[33mSKIP^[[0m: internal/backend/lima TestRunPinned (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6730670Z     pins_test.go:298: pins need a Linux host that lets devvm in a user namespace
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6731820Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6732030Z === ^[[33mSKIP^[[0m: internal/backend/lima TestLimaConfigsValid (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6734830Z     real_test.go:272: limactl isn't on PATH: these tests run real Lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6735230Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6736500Z === ^[[33mSKIP^[[0m: internal/backend/registry TestE2EExecQuoting (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6737130Z     e2e_test.go:26: tests/e2e runs it, on a VM of its own
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6737750Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6738320Z === ^[[33mSKIP^[[0m: internal/cli TestScript/git_watch (0.11s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6742360Z     cmd.go:380: macOS locks .git: git_protect.txtar
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6743130Z     testscript.go:609: WORK=$WORK
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6754210Z         PATH=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/TestScript1670895537/001:/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/devvm-stubs-951fd93d69d74a47:/Users/runner/.local/share/mise/installs/go/1.27.4/bin:/Users/runner/.local/share/mise/installs/go/1.27.4/bin:/Users/runner/.local/share/mise/installs/golangci-lint/2.15.0/golangci-lint-2.15.0-darwin-arm64:/Users/runner/.local/share/mise/installs/gotestsum/1.13.0:/Users/runner/.local/share/mise/installs/go-golang-org-x-vuln-cmd-govulncheck/1.9.0/bin:/Users/runner/.local/share/mise/installs/goreleaser/2.20.2:/Users/runner/.local/share/mise/installs/hugo-extended/0.169.0/Payload:/Users/runner/.local/share/mise/installs/vale/3.26.0:/Users/runner/.local/share/mise/installs/lychee/0.24.2/lychee-aarch64-apple-darwin:/Users/runner/.local/share/mise/installs/node/24.22.3/bin:/Users/runner/.local/share/mise/installs/markdownlint-cli2/0.24.1~aube~d90c28a31b70d972/node_modules/.bin:/Users/runner/.local/share/mise/installs/shellcheck/0.11.0/shellcheck-v0.11.0:/Users/runner/.local/share/mise/installs/actionlint/1.7.12:/Users/runner/.local/share/mise/installs/zizmor/1.32.0:/Users/runner/.local/share/mise/installs/minisign/0.12:/Users/runner/.local/share/mise/shims:/Users/runner/.local/share/mise/bin:/opt/homebrew/opt/rustup/bin:/opt/homebrew/lib/ruby/gems/3.4.0/bin:/opt/homebrew/opt/ruby@3.4/bin:/Users/runner/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/runner/.cargo/bin:/usr/local/opt/curl/bin:/usr/local/bin:/usr/local/sbin:/Users/runner/bin:/Users/runner/.yarn/bin:/Users/runner/Library/Android/sdk/tools:/Users/runner/Library/Android/sdk/platform-tools:/Library/Frameworks/Python.framework/Versions/Current/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/usr/bin:/bin:/usr/sbin:/sbin:/Users/runner/.dotnet/tools
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6776520Z         GOTRACEBACK=system
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6778870Z         HOME=/tmp/dvt.1763387006/home
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6779660Z         TMPDIR=$WORK/.tmp
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6780550Z         devnull=/dev/null
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6781220Z         /=/
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6782190Z         :=:
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6782730Z         $=$
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6784980Z         GOCOVERDIR=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T//devvm-test.dsjJDH/coverage/cli/script.188616938
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6787230Z         exe=
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6876510Z         XDG_CONFIG_HOME=/tmp/dvt.1763387006/config
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6877090Z         DEVVM_LIMA_HOME=/tmp/dvt.1763387006/lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6877490Z         LIMA_HOME=/tmp/dvt.1763387006/lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6877770Z         STUB_DIR=/tmp/dvt.1763387006/stub
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6878130Z         XDG_DATA_HOME=/tmp/dvt.1763387006/data
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6878460Z         STUB_LOG=/tmp/dvt.1763387006/stub/calls
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6878720Z         DEVVM_MESSAGES=names
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6879080Z         VMS=/tmp/dvt.1763387006/data/devvm/vms
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6879500Z         RUN=/tmp/dvt.1763387006/data/devvm/run
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6879790Z         CFG=/tmp/dvt.1763387006/config/devvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6880140Z         DATA=/tmp/dvt.1763387006/data/devvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6880510Z         DEVVM_UBUNTU_URL=file:///tmp/dvt.1763387006/ubuntu
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6881760Z         DEVVM_KVM=/tmp/dvt.1763387006/stub/kvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6882210Z         DEVVM_PINS=this host's kernel refused
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6882580Z         DEVVM_SECRET_SERVICE=devvm-test
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6882960Z         DEVVM_NO_RELEASE_CHECK=1
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6883290Z         DEVVM_TEST_MEMORY_GIB=16
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6883550Z         DEVVM_TEST_FREE_GIB=500
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6883890Z         DEVVM_TEST_LIST_TIMEOUT=10m
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6884140Z         DEVVM_TEST_CPUS=8
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6884480Z         TOOLCHAINS=node python rust go dotnet
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6884870Z         AGENTS=claude codex opencode pi cursor
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6885210Z         AGENT_CHOICES=claude, codex, opencode, pi, cursor
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6885640Z         LOGIN_AGENTS=claude, codex, opencode, pi, cursor
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6887780Z         KEY_AGENTS=opencode, pi
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6890300Z         DEVVM_HOST_MISE=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/devvm-stubs-951fd93d69d74a47/mise
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6891100Z         DEVVM_CLIP_TOOLS=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/devvm-stubs-951fd93d69d74a47
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6891700Z         MISE_STUB_LOCK=/Users/runner/work/devvm/devvm/testdata/mise.lock
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6892320Z         DEVVM_BIN=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/TestScript1670895537/001
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6892980Z         DEVVM_REPO=/Users/runner/work/devvm/devvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6893310Z         GIT_CONFIG_NOSYSTEM=1
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6893700Z         
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6894720Z         # On a host without .git locks (Linux), each launch warns that the VM can
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6895300Z         # change the hooks and config in .git, until devvm git-protect off says
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6895870Z         # the user knows. Each launch that finds the VM stopped, and devvm stop,
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6896330Z         # name what changed of what a lock would cover since the last check: the
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6896840Z         # new VM's first sums are recorded when it's made, and a VM with none
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6897360Z         # recorded (an older devvm's) records its first without naming anything.
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6897790Z         # A --clone VM mounts no .git, so neither applies. (0.103s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6898300Z         > [!linux] skip 'macOS locks .git: git_protect.txtar'
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6898680Z         
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6898760Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6899140Z === ^[[33mSKIP^[[0m: internal/cli TestScript/git_pins (0.09s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6900160Z     cmd.go:380: macOS locks .git on the host: git_protect.txtar
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6900520Z     testscript.go:609: WORK=$WORK
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6906020Z         PATH=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/TestScript1670895537/001:/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/devvm-stubs-951fd93d69d74a47:/Users/runner/.local/share/mise/installs/go/1.27.4/bin:/Users/runner/.local/share/mise/installs/go/1.27.4/bin:/Users/runner/.local/share/mise/installs/golangci-lint/2.15.0/golangci-lint-2.15.0-darwin-arm64:/Users/runner/.local/share/mise/installs/gotestsum/1.13.0:/Users/runner/.local/share/mise/installs/go-golang-org-x-vuln-cmd-govulncheck/1.9.0/bin:/Users/runner/.local/share/mise/installs/goreleaser/2.20.2:/Users/runner/.local/share/mise/installs/hugo-extended/0.169.0/Payload:/Users/runner/.local/share/mise/installs/vale/3.26.0:/Users/runner/.local/share/mise/installs/lychee/0.24.2/lychee-aarch64-apple-darwin:/Users/runner/.local/share/mise/installs/node/24.22.3/bin:/Users/runner/.local/share/mise/installs/markdownlint-cli2/0.24.1~aube~d90c28a31b70d972/node_modules/.bin:/Users/runner/.local/share/mise/installs/shellcheck/0.11.0/shellcheck-v0.11.0:/Users/runner/.local/share/mise/installs/actionlint/1.7.12:/Users/runner/.local/share/mise/installs/zizmor/1.32.0:/Users/runner/.local/share/mise/installs/minisign/0.12:/Users/runner/.local/share/mise/shims:/Users/runner/.local/share/mise/bin:/opt/homebrew/opt/rustup/bin:/opt/homebrew/lib/ruby/gems/3.4.0/bin:/opt/homebrew/opt/ruby@3.4/bin:/Users/runner/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/runner/.cargo/bin:/usr/local/opt/curl/bin:/usr/local/bin:/usr/local/sbin:/Users/runner/bin:/Users/runner/.yarn/bin:/Users/runner/Library/Android/sdk/tools:/Users/runner/Library/Android/sdk/platform-tools:/Library/Frameworks/Python.framework/Versions/Current/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/usr/bin:/bin:/usr/sbin:/sbin:/Users/runner/.dotnet/tools
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6911860Z         GOTRACEBACK=system
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6912210Z         HOME=/tmp/dvt.1214891614/home
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6912560Z         TMPDIR=$WORK/.tmp
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6912800Z         devnull=/dev/null
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6913120Z         /=/
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6913350Z         :=:
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6913620Z         $=$
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6914130Z         GOCOVERDIR=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T//devvm-test.dsjJDH/coverage/cli/script.3884769419
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6918950Z         exe=
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6919770Z         DEVVM_LIMA_HOME=/tmp/dvt.1214891614/lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6921460Z         LIMA_HOME=/tmp/dvt.1214891614/lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6921780Z         STUB_DIR=/tmp/dvt.1214891614/stub
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6922190Z         XDG_DATA_HOME=/tmp/dvt.1214891614/data
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6922510Z         XDG_CONFIG_HOME=/tmp/dvt.1214891614/config
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6922910Z         STUB_LOG=/tmp/dvt.1214891614/stub/calls
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6923280Z         DEVVM_MESSAGES=names
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6923560Z         DATA=/tmp/dvt.1214891614/data/devvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6923960Z         VMS=/tmp/dvt.1214891614/data/devvm/vms
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6924350Z         RUN=/tmp/dvt.1214891614/data/devvm/run
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6924680Z         CFG=/tmp/dvt.1214891614/config/devvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6925160Z         DEVVM_UBUNTU_URL=file:///tmp/dvt.1214891614/ubuntu
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6925520Z         DEVVM_KVM=/tmp/dvt.1214891614/stub/kvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6925920Z         DEVVM_PINS=this host's kernel refused
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6926350Z         DEVVM_SECRET_SERVICE=devvm-test
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6926710Z         DEVVM_NO_RELEASE_CHECK=1
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6927100Z         DEVVM_TEST_FREE_GIB=500
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6927420Z         DEVVM_TEST_LIST_TIMEOUT=10m
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6927830Z         DEVVM_TEST_CPUS=8
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6928080Z         DEVVM_TEST_MEMORY_GIB=16
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6928420Z         TOOLCHAINS=node python rust go dotnet
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6928740Z         AGENTS=claude codex opencode pi cursor
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6930960Z         AGENT_CHOICES=claude, codex, opencode, pi, cursor
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6931450Z         LOGIN_AGENTS=claude, codex, opencode, pi, cursor
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6931780Z         KEY_AGENTS=opencode, pi
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6932300Z         DEVVM_HOST_MISE=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/devvm-stubs-951fd93d69d74a47/mise
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6932970Z         DEVVM_CLIP_TOOLS=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/devvm-stubs-951fd93d69d74a47
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6933470Z         MISE_STUB_LOCK=/Users/runner/work/devvm/devvm/testdata/mise.lock
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6934010Z         DEVVM_BIN=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/TestScript1670895537/001
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6934450Z         DEVVM_REPO=/Users/runner/work/devvm/devvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6934820Z         GIT_CONFIG_NOSYSTEM=1
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6935110Z         
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6935450Z         # On a Linux host that pins (DEVVM_PINS stands in for devvm's check of the
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6936070Z         # kernel), .git protection is on: a new VM's start pins .git in QEMU's
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6936600Z         # namespace, which the stub limactl doesn't run, so this checks devvm's
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6937090Z         # side: the mode, devvm git-protect, and the launches' warnings. A VM left
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6937610Z         # off by a host that couldn't lock is told it can be locked now; a VM
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6938070Z         # that's on doesn't start where the host can't pin, until it's off. (0.084s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6938590Z         > [!linux] skip 'macOS locks .git on the host: git_protect.txtar'
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6939040Z         
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6939180Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6939810Z === ^[[33mSKIP^[[0m: internal/cli TestScript/fixture_v010_mount_cache (0.13s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6940280Z     cmd.go:380: a Linux host's cache mode
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6940630Z     testscript.go:609: WORK=$WORK
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6947260Z         PATH=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/TestScript1670895537/001:/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/devvm-stubs-951fd93d69d74a47:/Users/runner/.local/share/mise/installs/go/1.27.4/bin:/Users/runner/.local/share/mise/installs/go/1.27.4/bin:/Users/runner/.local/share/mise/installs/golangci-lint/2.15.0/golangci-lint-2.15.0-darwin-arm64:/Users/runner/.local/share/mise/installs/gotestsum/1.13.0:/Users/runner/.local/share/mise/installs/go-golang-org-x-vuln-cmd-govulncheck/1.9.0/bin:/Users/runner/.local/share/mise/installs/goreleaser/2.20.2:/Users/runner/.local/share/mise/installs/hugo-extended/0.169.0/Payload:/Users/runner/.local/share/mise/installs/vale/3.26.0:/Users/runner/.local/share/mise/installs/lychee/0.24.2/lychee-aarch64-apple-darwin:/Users/runner/.local/share/mise/installs/node/24.22.3/bin:/Users/runner/.local/share/mise/installs/markdownlint-cli2/0.24.1~aube~d90c28a31b70d972/node_modules/.bin:/Users/runner/.local/share/mise/installs/shellcheck/0.11.0/shellcheck-v0.11.0:/Users/runner/.local/share/mise/installs/actionlint/1.7.12:/Users/runner/.local/share/mise/installs/zizmor/1.32.0:/Users/runner/.local/share/mise/installs/minisign/0.12:/Users/runner/.local/share/mise/shims:/Users/runner/.local/share/mise/bin:/opt/homebrew/opt/rustup/bin:/opt/homebrew/lib/ruby/gems/3.4.0/bin:/opt/homebrew/opt/ruby@3.4/bin:/Users/runner/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/runner/.cargo/bin:/usr/local/opt/curl/bin:/usr/local/bin:/usr/local/sbin:/Users/runner/bin:/Users/runner/.yarn/bin:/Users/runner/Library/Android/sdk/tools:/Users/runner/Library/Android/sdk/platform-tools:/Library/Frameworks/Python.framework/Versions/Current/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/usr/bin:/bin:/usr/sbin:/sbin:/Users/runner/.dotnet/tools
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6954280Z         GOTRACEBACK=system
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6954570Z         HOME=/tmp/dvt.2652741234/home
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6954930Z         TMPDIR=$WORK/.tmp
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6955150Z         devnull=/dev/null
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6955420Z         /=/
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6961920Z         :=:
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6962390Z         $=$
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6963590Z         GOCOVERDIR=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T//devvm-test.dsjJDH/coverage/cli/script.3030899348
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6964920Z         exe=
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6965440Z         LIMA_HOME=/tmp/dvt.2652741234/lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6966830Z         STUB_DIR=/tmp/dvt.2652741234/stub
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6968340Z         XDG_DATA_HOME=/tmp/dvt.2652741234/data
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6968760Z         XDG_CONFIG_HOME=/tmp/dvt.2652741234/config
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6969140Z         DEVVM_LIMA_HOME=/tmp/dvt.2652741234/lima
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6969520Z         STUB_LOG=/tmp/dvt.2652741234/stub/calls
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6969880Z         DEVVM_MESSAGES=names
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6970140Z         CFG=/tmp/dvt.2652741234/config/devvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6970480Z         DATA=/tmp/dvt.2652741234/data/devvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6970840Z         VMS=/tmp/dvt.2652741234/data/devvm/vms
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6971160Z         RUN=/tmp/dvt.2652741234/data/devvm/run
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6971550Z         DEVVM_UBUNTU_URL=file:///tmp/dvt.2652741234/ubuntu
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6971890Z         DEVVM_KVM=/tmp/dvt.2652741234/stub/kvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6972250Z         DEVVM_PINS=this host's kernel refused
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6972610Z         DEVVM_SECRET_SERVICE=devvm-test
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6972910Z         DEVVM_NO_RELEASE_CHECK=1
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6973540Z         DEVVM_TEST_CPUS=8
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6973870Z         DEVVM_TEST_MEMORY_GIB=16
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6974190Z         DEVVM_TEST_FREE_GIB=500
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6974640Z         DEVVM_TEST_LIST_TIMEOUT=10m
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6974940Z         TOOLCHAINS=node python rust go dotnet
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6975320Z         AGENTS=claude codex opencode pi cursor
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6975650Z         AGENT_CHOICES=claude, codex, opencode, pi, cursor
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6976000Z         LOGIN_AGENTS=claude, codex, opencode, pi, cursor
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6976360Z         KEY_AGENTS=opencode, pi
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6976750Z         DEVVM_HOST_MISE=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/devvm-stubs-951fd93d69d74a47/mise
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6977450Z         DEVVM_CLIP_TOOLS=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/devvm-stubs-951fd93d69d74a47
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6978000Z         MISE_STUB_LOCK=/Users/runner/work/devvm/devvm/testdata/mise.lock
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6978860Z         DEVVM_BIN=/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/TestScript1670895537/001
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6979400Z         DEVVM_REPO=/Users/runner/work/devvm/devvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6979820Z         GIT_CONFIG_NOSYSTEM=1
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6980100Z         
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6980440Z         # devvm mount-cache on devvm 0.1.0's state (testdata/v0.1.0/GOOS, which
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6980830Z         # 0.1.0 itself made: see fixture_v010.txtar). On a Linux host, app's
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6981230Z         # project folder has Lima's mmap, which 0.1.0 chose nothing about: devvm
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6981640Z         # mount-cache shows it, with the warning, and devvm mount-cache none
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6982370Z         # switches it from its next start, in one edit, with the folder mounted
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6982850Z         # again. macOS has no such choice, which fixture_v010.txtar checks. (0.113s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6983280Z         > [!linux] skip 'a Linux host''s cache mode'
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6983500Z         
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6983580Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6983940Z === ^[[33mSKIP^[[0m: internal/cli/docgen TestNoThirdPartyLoads (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6984460Z     site_test.go:165: DOCS_SITE isn't set: mise run lint:docs builds the site and runs this test on it
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6984810Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6984990Z === ^[[33mSKIP^[[0m: internal/desktop TestE2EDesktop (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6985360Z     e2e_test.go:20: tests/e2e runs it, on a VM of its own
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6985570Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6985760Z === ^[[33mSKIP^[[0m: internal/netpolicy TestE2ESelfCheck (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6986510Z     e2e_test.go:25: tests/e2e runs it, on a VM of its own
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6986690Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6986880Z === ^[[33mSKIP^[[0m: internal/netpolicy TestLocalProxy (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6987320Z     localproxy_test.go:139: no socat: exec: "socat": executable file not found in $PATH
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6987600Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6987770Z === ^[[33mSKIP^[[0m: internal/platform TestLockHolder (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6988120Z     lock_test.go:176: run by TestLockFileKilled
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6988300Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6988460Z === ^[[33mSKIP^[[0m: internal/platform TestPinsInNamespace (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6988840Z     pin_test.go:193: pins need a Linux host that lets devvm in a user namespace
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6989080Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6989260Z === ^[[33mSKIP^[[0m: internal/platform TestPinsWithoutNamespace (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6989550Z     pin_test.go:253: Linux's
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6989680Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6989820Z === ^[[33mSKIP^[[0m: internal/platform TestPinWaits (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6990070Z     pin_test.go:292: Linux's
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6990200Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6990340Z === ^[[33mSKIP^[[0m: internal/tools TestGlibcNeeds (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6990630Z     glibc_test.go:202: no readelf here
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6990780Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6990940Z === ^[[33mSKIP^[[0m: internal/tools TestShareHolder (0.00s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6991220Z     tools_test.go:1115: run by TestLockShareKilled
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6991390Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6991550Z === ^[[33mSKIP^[[0m: internal/vm TestHistoryImportRuns (0.01s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6991810Z     agents_test.go:263: no GNU tar
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6991970Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6992140Z === ^[[33mSKIP^[[0m: internal/vm TestHistoryExportRuns (0.02s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6992460Z     opencodedb_test.go:421: no GNU tar
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6992610Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6992800Z === ^[[33mSKIP^[[0m: internal/vm TestHistoryImportCleansOpencode (0.02s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6993090Z     opencodedb_test.go:513: no GNU tar
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6993250Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6993320Z === ^[[31mFailed^[[0m
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6993640Z === ^[[31mFAIL^[[0m: internal/vm TestLinkCheckBurst (1.95s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6994180Z     linksession_test.go:204: 256 checks asked the backend map[Exec:2 Inspect:2 Running:8 SSH:2], want one Inspect and one SSH
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6994810Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6994960Z === ^[[31mFAIL^[[0m: internal/vmssh TestPipeSSHGrace (1.05s)
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6995330Z     relay_test.go:117: talking, half closed: the relay ended while the VM talked: EOF
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6995600Z 
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:54.6995700Z DONE 3100 tests, 50 skipped, 2 failures in 589.873s
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:55.2463650Z ^[[34m[test]^[[0m ^[[31mERROR^[[0m task failed
+check (macos-latest, UTC)	Run mise run test	2026-11-13T23:55:55.2627370Z ##[error]Process completed with exit code 1.
