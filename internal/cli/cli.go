@@ -137,6 +137,9 @@ func (a App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		if n, ok := newer[r.ID]; ok {
 			withJobs[i].Newer = &n
 		}
+		if seen.keptUnfinished(r) {
+			continue
+		}
 		jobs, err := retry(ctx, jobsApp, stderr, fmt.Sprintf("gh run view %d", r.ID), func() ([]gh.JobSteps, error) {
 			// GitHub may hold later attempts than the one reported.
 			return a.GH.RunJobsAttempt(ctx, r.ID, r.Attempt)
@@ -1027,6 +1030,13 @@ type listed struct {
 
 func newListed() *listed {
 	return &listed{last: map[int64]gh.Run{}, after: map[int64][]int64{}, missing: map[int64]bool{}}
+}
+
+// keptUnfinished reports whether r is a run the latest list doesn't have and
+// that was last seen not completed. Its jobs would be newer than its row, so
+// they aren't fetched.
+func (l *listed) keptUnfinished(r gh.Run) bool {
+	return l.missing[r.ID] && r.Status != "completed"
 }
 
 // observe records runs, the latest list. It writes to w the line warn returns

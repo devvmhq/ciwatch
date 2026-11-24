@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -44,8 +45,87 @@ func TestWatchRunVanishesAfterSuccess(t *testing.T) {
 	if n := strings.Count(stderr, unlisted(docsRun, "Docs")); n != 1 {
 		t.Errorf("stderr = %q, want the warning once, got %d", stderr, n)
 	}
-	checkRow(t, stdout, "CI", "completed", "success")
-	checkRow(t, stdout, "Docs", "completed", "success")
+	checkTable(t, stdout, slices.Concat(
+		[]row{runRow("CI", "completed", "success")}, jobRowsOf(t, "run-view-"+ciRun+".json"),
+		[]row{runRow("Docs", "completed", "success")}, jobRowsOf(t, "run-view-"+docsRun+".json"),
+	))
+}
+
+// TestWatchRunVanishesInProgressNoJobs covers AC-1 and AC-7: a kept run that
+// wasn't completed when last listed shows no job rows, and its jobs aren't
+// fetched.
+func TestWatchRunVanishesInProgressNoJobs(t *testing.T) {
+	for _, status := range []string{"in_progress", "queued", "waiting", "requested", "pending"} {
+		t.Run(status, func(t *testing.T) {
+			opts := fakeOpts{listRaw: []string{
+				list(attemptRun(ciRun, "CI", status, "", 1), passed(docsRun, "Docs", 1)),
+				list(passed(docsRun, "Docs", 1)),
+			}}
+			stdout, stderr, calls := runVanish(t, opts, cli.ExitUnchecked, 30)
+			if n := strings.Count(stderr, unlisted(ciRun, "CI")); n != 1 {
+				t.Errorf("stderr = %q, want the warning once, got %d", stderr, n)
+			}
+			checkTable(t, stdout, slices.Concat(
+				[]row{runRow("CI", status, "")},
+				[]row{runRow("Docs", "completed", "success")}, jobRowsOf(t, "run-view-"+docsRun+".json"),
+			))
+			if slices.Contains(calls.viewIDs, ciRun) {
+				t.Errorf("gh run view ids = %q, want none for the kept run %s", calls.viewIDs, ciRun)
+			}
+		})
+	}
+}
+
+// TestWatchRunVanishesInProgressJSON covers AC-2: the kept run's jobs are an
+// empty array, with no jobs_error.
+func TestWatchRunVanishesInProgressJSON(t *testing.T) {
+	opts := fakeOpts{listRaw: []string{
+		list(attemptRun(ciRun, "CI", "in_progress", "", 1), passed(docsRun, "Docs", 1)),
+		list(passed(docsRun, "Docs", 1)),
+	}}
+	stdout, _, _ := runVanish(t, opts, cli.ExitUnchecked, 30, "--json")
+	var got struct {
+		Runs []map[string]json.RawMessage `json:"runs"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("stdout %q is not JSON: %v", stdout, err)
+	}
+	found := false
+	for _, r := range got.Runs {
+		if string(r["workflow"]) != `"CI"` {
+			continue
+		}
+		found = true
+		if jobs := strings.TrimSpace(string(r["jobs"])); jobs != "[]" {
+			t.Errorf("CI jobs = %s, want []", jobs)
+		}
+		if e, ok := r["jobs_error"]; ok {
+			t.Errorf("CI has jobs_error %s, want it omitted", e)
+		}
+	}
+	if !found {
+		t.Errorf("stdout = %q, want a CI run", stdout)
+	}
+}
+
+// TestRerunVanishesInProgressNoJobs covers AC-3: a rerun's new attempt that
+// was last seen in progress and dropped out shows no job rows.
+func TestRerunVanishesInProgressNoJobs(t *testing.T) {
+	opts := fakeOpts{listRaw: lists(list(failed(ciRun, "CI", 1), passed(docsRun, "Docs", 1)),
+		list(attemptRun(ciRun, "CI", "in_progress", "", 2), passed(docsRun, "Docs", 1)),
+		list(passed(docsRun, "Docs", 1)),
+	)}
+	stdout, stderr, calls := runVanish(t, opts, cli.ExitUnchecked, 30, "--rerun-failed")
+	if !strings.Contains(stderr, unlistedCI) {
+		t.Errorf("stderr = %q, want the warning ending in \"not waiting for it\"", stderr)
+	}
+	checkTable(t, stdout, slices.Concat(
+		[]row{runRow("CI", "in_progress", "")},
+		[]row{runRow("Docs", "completed", "success")}, jobRowsOf(t, "run-view-"+docsRun+".json"),
+	))
+	if slices.Contains(calls.viewIDs, ciRun) {
+		t.Errorf("gh run view ids = %q, want none for the kept run %s", calls.viewIDs, ciRun)
+	}
 }
 
 // TestWatchRunVanishesInProgress covers AC-3: a run last seen in progress

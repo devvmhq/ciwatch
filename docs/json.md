@@ -21,7 +21,7 @@ Schema 1 is not frozen yet: it freezes at ciwatch's first release, and until the
 | `runs[].status` | string | always |
 | `runs[].conclusion` | string | always, empty while the run is not completed |
 | `runs[].url` | string | always |
-| `runs[].jobs` | array of objects | always, empty if the jobs could not be fetched |
+| `runs[].jobs` | array of objects | always, empty if the jobs could not be fetched, or if the run is no longer listed and was last seen not completed |
 | `runs[].jobs_error` | string | only when the run's jobs could not be fetched |
 | `runs[].fuzz_crashes` | array of objects | only for a failed run (`failure` or `timed_out`) with `crash-Fuzz<Name>` artifacts, in the order the API lists them |
 | `runs[].fuzz_crashes[].target` | string | always, with `fuzz_crashes`: the fuzz target, from the artifact name |
@@ -62,4 +62,4 @@ Schema 1 is not frozen yet: it freezes at ciwatch's first release, and until the
 | 3 | a run was cancelled |
 | 4 | ciwatch could not check |
 
-A run that is no longer listed (not under `--once`) counts at its last known state.
+A run that is no longer listed (not under `--once`) counts at its last known state. If that state wasn't completed, its jobs are not fetched, since they would be newer than its row, and `jobs` is empty.
