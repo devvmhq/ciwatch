@@ -414,7 +414,7 @@ func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Wri
 			files := res.Files
 			switch {
 			case err != nil:
-				fail(fmt.Sprintf("looking for %s in the checkout: %v", c.Target, err))
+				fail(fmt.Sprintf("looking for %s in the checkout: %s", c.Target, quoteErr(err)))
 				runs[i].Crashes[k].failKind = failRetry
 				continue
 			case len(files) == 0:
@@ -436,7 +436,7 @@ func (a App) fetchCrashes(ctx context.Context, runs []runWithJobs, stderr io.Wri
 				return ctx.Err() // gh may fail with its own error when killed; report the cancel
 			}
 			if err != nil {
-				fail(err.Error())
+				fail(quoteErr(err))
 				runs[i].Crashes[k].failKind = failRetry
 				if errors.Is(err, gh.ErrNetwork) || errors.Is(err, gh.ErrTemporary) {
 					dlApp.Retries = 0
@@ -462,7 +462,34 @@ func reason(err error) string {
 	if errors.As(err, &pe) {
 		return pe.Err.Error()
 	}
-	return err.Error()
+	return quoteErr(err)
+}
+
+// quoteErr is err's text with the path of each *fs.PathError in its chain
+// quoted by quotePath, so a name from the checkout can't split the line.
+func quoteErr(err error) string {
+	msg := err.Error()
+	var walk func(error)
+	walk = func(e error) {
+		if e == nil {
+			return
+		}
+		if pe, ok := e.(*fs.PathError); ok { //nolint:errorlint // the tree is walked by hand, so each node is checked as is
+			if q := quotePath(pe.Path); q != pe.Path {
+				msg = strings.Replace(msg, pe.Error(), pe.Op+" "+q+": "+pe.Err.Error(), 1)
+			}
+		}
+		switch u := e.(type) { //nolint:errorlint // the tree is walked by hand, so each node is checked as is
+		case interface{ Unwrap() error }:
+			walk(u.Unwrap())
+		case interface{ Unwrap() []error }:
+			for _, c := range u.Unwrap() {
+				walk(c)
+			}
+		}
+	}
+	walk(err)
+	return msg
 }
 
 // stageAndPlace downloads the artifact into a new, empty directory under

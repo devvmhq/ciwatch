@@ -4,35 +4,45 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/fstest"
 
 	"github.com/devvmhq/ciwatch/internal/cli"
 )
 
-// denyFS refuses to open the chosen paths with a permission error. It
-// implements only Open, so fs.WalkDir lists directories through Open too.
+// denyFS refuses to open the chosen paths with err. It implements only
+// Open, so fs.WalkDir lists directories through Open too.
 type denyFS struct {
 	fs.FS
 	denied map[string]bool
+	err    error
 }
 
 func (d denyFS) Open(name string) (fs.File, error) {
 	if d.denied[name] {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
+		return nil, &fs.PathError{Op: "open", Path: name, Err: d.err}
 	}
 	return d.FS.Open(name)
 }
 
 // runDenied runs ciwatch on the failed Fuzz run with the paths in the
-// checkout unreadable.
+// checkout unreadable (permission denied).
 func runDenied(t *testing.T, opts fakeOpts, denied []string, wantCode int, args ...string) (stdout, stderr string) {
+	t.Helper()
+	return runDeniedWith(t, opts, denied, fs.ErrPermission, wantCode, args...)
+}
+
+// runDeniedWith is runDenied with the error the paths fail with.
+func runDeniedWith(t *testing.T, opts fakeOpts, denied []string, denyErr error, wantCode int, args ...string) (stdout, stderr string) {
 	t.Helper()
 	app, _ := fakeWith(t, "run-list-failure.json", nil, nil, opts)
 	open := app.OpenDir
@@ -40,7 +50,7 @@ func runDenied(t *testing.T, opts fakeOpts, denied []string, wantCode int, args 
 	for _, p := range denied {
 		set[p] = true
 	}
-	app.OpenDir = func(root string) fs.FS { return denyFS{open(root), set} }
+	app.OpenDir = func(root string) fs.FS { return denyFS{open(root), set, denyErr} }
 	var out, errOut bytes.Buffer
 	if code := app.Run(t.Context(), append(args, "HEAD"), &out, &errOut); code != wantCode {
 		t.Fatalf("exit code = %d, want %d (stderr %q)", code, wantCode, errOut.String())
@@ -261,6 +271,99 @@ func TestFuzzInterruptQuotesFetchedTo(t *testing.T) {
 	if !slices.Contains(lastLines(stderr), want) {
 		t.Errorf("stderr = %q, want the line %q", stderr, want)
 	}
+}
+
+// checkFetchError checks that stderr has the one line "can't fetch" with
+// msg, that no line of it starts with a piece of a split path, and that
+// the first crash's fetch_error is msg.
+func checkFetchError(t *testing.T, stderr string, crashes []jsonCrash, msg string) {
+	t.Helper()
+	want := "ciwatch: can't fetch crash-FuzzParse of run " + fuzzRun + ": " + msg + "\n"
+	if strings.Count(stderr, want) != 1 {
+		t.Errorf("stderr = %q, want the line %q once", stderr, want)
+	}
+	for _, l := range lastLines(stderr) {
+		if strings.HasPrefix(l, "q/") {
+			t.Errorf("stderr = %q, want no line starting with q/, the split path", stderr)
+		}
+	}
+	if len(crashes) != 1 || crashes[0].FetchErr != msg {
+		t.Errorf("fuzz_crashes = %+v, want fetch_error %q", crashes, msg)
+	}
+}
+
+// TestFuzzFetchWalkErrorQuotesPath covers AC-1 and AC-3 of the error-text
+// quoting change: a search error that names a path from the checkout.
+func TestFuzzFetchWalkErrorQuotesPath(t *testing.T) {
+	tests := []struct{ name, file, shown string }{
+		{"AC-1 newline in the path", "p\nq/q_test.go", `"p\nq/q_test.go"`},
+		{"AC-3 ordinary path", "internal/q/q_test.go", "internal/q/q_test.go"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			checkout := fstest.MapFS{tt.file: {Data: []byte(otherFuzzGo)}}
+			msg := "looking for FuzzParse in the checkout: open " + tt.shown + ": input/output error"
+			_, stderr := runDeniedWith(t, crashOf(oneCrash, checkout), []string{tt.file}, syscall.EIO, cli.ExitFailed, "--fetch-crashes")
+			stdout, _ := runDeniedWith(t, crashOf(oneCrash, checkout), []string{tt.file}, syscall.EIO, cli.ExitFailed, "--json", "--fetch-crashes")
+			var doc struct {
+				Runs []map[string]json.RawMessage `json:"runs"`
+			}
+			if err := json.Unmarshal([]byte(stdout), &doc); err != nil || len(doc.Runs) != 2 {
+				t.Fatalf("stdout %q is not the JSON of 2 runs: %v", stdout, err)
+			}
+			crashes, _ := crashesOf(t, doc.Runs[0])
+			checkFetchError(t, stderr, crashes, msg)
+		})
+	}
+}
+
+// TestFuzzFetchPlaceErrorQuotesPath covers AC-2 and AC-4 of the error-text
+// quoting change: placing an input fails because the target folder's path
+// runs through a regular file.
+func TestFuzzFetchPlaceErrorQuotesPath(t *testing.T) {
+	tests := []struct {
+		name, dir string
+		quote     bool
+	}{
+		{"AC-2 newline in the folder", "p\nq", true},
+		{"AC-4 space in the folder", "p q", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, root, _ := realCheckout(t, map[string]string{
+				tt.dir + "/p_test.go":               parseFuzzGo,
+				tt.dir + "/testdata/fuzz/FuzzParse": "a file, not a folder",
+			}, map[string]string{"abc": "x"})
+			if err := os.Remove(filepath.Join(root, "internal", "p", "p_test.go")); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(root, tt.dir, "testdata", "fuzz", "FuzzParse")
+			shown := path
+			if tt.quote {
+				shown = strconv.Quote(path)
+			}
+			msg := "mkdir " + shown + ": not a directory"
+			_, stderr, _ := runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+			run, _, _ := fuzzJSON(t, opts, "--fetch-crashes")
+			crashes, _ := crashesOf(t, run)
+			checkFetchError(t, stderr, crashes, msg)
+			if _, err := os.Stat(filepath.Join(path, "abc")); err == nil {
+				t.Error("the input was written, want nothing placed")
+			}
+		})
+	}
+}
+
+// TestFuzzFetchDownloadErrorUnchanged covers AC-5 of the error-text quoting
+// change: an error with no path in it keeps gh's text as it is.
+func TestFuzzFetchDownloadErrorUnchanged(t *testing.T) {
+	msg := "gh: exit status 1: HTTP 410: Gone (https://api.github.com/repos/o/r/actions/artifacts/1/zip)"
+	opts := crashOf(oneCrash, fetchCheckout)
+	opts.downloadErr = map[string]error{"crash-FuzzParse": errors.New(msg)}
+	_, stderr, _ := runFuzz(t, opts, cli.ExitFailed, "--fetch-crashes")
+	run, _, _ := fuzzJSON(t, opts, "--fetch-crashes")
+	crashes, _ := crashesOf(t, run)
+	checkFetchError(t, stderr, crashes, "gh run download "+fuzzRun+" -n crash-FuzzParse: "+msg)
 }
 
 // TestFuzzFetchPrintablePathsUnquoted covers AC-5 of the path-quoting
